@@ -1,6 +1,6 @@
 # Test coverage and omissions
 
-`npm test` selects the 44 test files included in this source bundle. All 529 tests passed on the [earlier verified archive](publication-boundary.md#exercise-the-toolkit-locally). The revised archive will be tested separately. Omitted files and cases are coverage gaps.
+From the source tree, `npm test` selects the 44 included test files. The 529-test results apply to the two exact source archives listed in [recorded verification](publication-boundary.md#recorded-verification). The v0.1.1 record covers source integrity, installation, and the synthetic quickstart. Omitted files and cases are coverage gaps.
 
 Multibyte stress tests use non-CJK samples.
 

@@ -1,9 +1,9 @@
 # Local agent session
 
-Copy `audit-agent-manifest.json`, set the canonical project root and already-running URL, and keep it under the site's `evidence/`. Do not include an `actions` array. Start one persistent process:
+Set up Node.js and matching Chromium as described in [first use](first-use.md). Copy `audit-agent-manifest.json`, set the canonical project root and already-running URL, and keep it under the site's `evidence/`. Do not include an `actions` array. Start one persistent process:
 
 ```sh
-node /absolute/tool/src/cli.js audit-agent /absolute/site/evidence/agent-manifest.json
+npx -y a11y-agent-kit@0.1.1 audit-agent /absolute/site/evidence/agent-manifest.json
 ```
 
 Write one operation per stdin line. Read each response before choosing dependent actions:
@@ -37,8 +37,8 @@ Alternatively, send `submit` with an explicit `proposal`. Submission seals the c
 `{"command":"finish"}` or EOF closes without creating a proposal. SIGINT/SIGTERM or deadline also preserve an incomplete outcome. Acknowledged drafts remain recoverable; neither a draft nor a late proposal becomes timely completed delivery automatically.
 
 ```sh
-node /absolute/tool/src/cli.js audit-checkpoint-read /absolute/site/evidence/audit-UUID/audit-checkpoint-00000002.json
-node /absolute/tool/src/cli.js audit-submit-checkpoint /absolute/site/evidence/audit-UUID/audit-ID.json /absolute/site/evidence/audit-UUID/audit-checkpoint-00000002.json
+npx -y a11y-agent-kit@0.1.1 audit-checkpoint-read /absolute/site/evidence/audit-UUID/audit-checkpoint-00000002.json
+npx -y a11y-agent-kit@0.1.1 audit-submit-checkpoint /absolute/site/evidence/audit-UUID/audit-ID.json /absolute/site/evidence/audit-UUID/audit-checkpoint-00000002.json
 ```
 
 The second command is a new explicit submission with persisted recovery provenance, followed by normal independent review. The original timeout and its incomplete result remain in the collection. Draft/needs-review commands use exit1 intentionally; inspect their JSON rather than discarding it. Whole-page/whole-site conformance and real screen-reader behavior remain unassessed.

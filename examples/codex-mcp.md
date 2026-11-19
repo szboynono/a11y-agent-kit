@@ -3,10 +3,10 @@
 The current stdio server registers the three evidence-audit lifecycle tools
 alongside the historical analyze/verify/check tools. Use the
 [generic MCP configuration and workflow](byoa-audit.md#mcp-connection), with
-`node /absolute/tool/src/cli.js serve` as the local child process.
+`npx -y a11y-agent-kit@0.1.1 serve` as the local child process.
 
-To exercise that exact server command and its audit operations without a model,
-run this in a source checkout after dependency/browser setup:
+To exercise the stdio protocol on a local fixture, run the source harness
+from a checkout after `npm ci` and matching Chromium installation.
 
 ```sh
 node scripts/quickstart.mjs

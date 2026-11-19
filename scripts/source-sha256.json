@@ -18,8 +18,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 4362,
-      "sha256": "4d4686755059968da0cee384a092bdd334e295390fe33ce109316952d6172a4e"
+      "bytes": 4541,
+      "sha256": "cfef3170b2f18a1678ce1e13e60c69906a0129025e004da242baa6c7139c7399"
     },
     {
       "path": "THIRD_PARTY_NOTICES.md",
@@ -43,8 +43,8 @@
     },
     {
       "path": "docs/publication-boundary.md",
-      "bytes": 4249,
-      "sha256": "c635ee33fe581d03495ffbc2751dbbee76d074d9c5dcefc89e2930c47ca32ea2"
+      "bytes": 4587,
+      "sha256": "6176279f15d8c4bfaafd471ae1c349f19dd10f134fce774b400fc6d5bce316cf"
     },
     {
       "path": "docs/state-machines.md",
@@ -53,13 +53,13 @@
     },
     {
       "path": "docs/test-coverage.md",
-      "bytes": 3460,
-      "sha256": "8e64a9bfbcb0a763d01df77c075223f2446b6531abc615ed1b3ee80d5a768b00"
+      "bytes": 3532,
+      "sha256": "6af665360a4f48fa24eef8e3576c7a23fdcf8a115d333e37319c2cc30f22f264"
     },
     {
       "path": "examples/agent-workflow.md",
-      "bytes": 3769,
-      "sha256": "27e14cc8823ed4043754d8fa58225b6e61d1f7a668c62873c4e1326db16f05d4"
+      "bytes": 3766,
+      "sha256": "a508fc10ee33dfe0dc95e0a36a1fc9224a4b654b058b726ef55f3c7bd463c811"
     },
     {
       "path": "examples/audit-agent-manifest.json",
@@ -73,8 +73,8 @@
     },
     {
       "path": "examples/audit-agent-workflow.md",
-      "bytes": 3464,
-      "sha256": "bcd63066855affbc3bb115e1ec88bce01f9e5c2a696d193e255fb95e60069097"
+      "bytes": 3535,
+      "sha256": "9bd5291644b4542711e604b0462dc8d12f0d6bfa4323b277775cb26c827ddb97"
     },
     {
       "path": "examples/audit-live.jsonl",
@@ -98,13 +98,13 @@
     },
     {
       "path": "examples/codex-cli.md",
-      "bytes": 854,
-      "sha256": "9beab69b64a9c6cd76f943ea8d3a8656a8f2385ef193cf135859ce82ff1a12ab"
+      "bytes": 796,
+      "sha256": "ac7bdeea5e459dd47a314def54a0cdf4fbe4e4fc1b80bd05d4aec4254595f86a"
     },
     {
       "path": "examples/codex-mcp.md",
-      "bytes": 885,
-      "sha256": "9b15f52d9e08b5f98226f977617f8252b949dd07905a2017880fb2381eea9219"
+      "bytes": 881,
+      "sha256": "39a8df06abc47ec0dab00eea50d569470b330477190cd4abd0ff36c271354610"
     },
     {
       "path": "examples/first-use.md",
@@ -153,8 +153,8 @@
     },
     {
       "path": "skills/a11y-fix-loop/SKILL.md",
-      "bytes": 4765,
-      "sha256": "a184b7c5076722dcbd2ea93a4affe84fe98660691655200f77d2c93299d6adc7"
+      "bytes": 4835,
+      "sha256": "bc28737590e71baba1a349b3874c3fcc2ba11e4007074fab5df0bdf6169aee19"
     },
     {
       "path": "src/audit/agent-cli.js",

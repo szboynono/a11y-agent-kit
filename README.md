@@ -6,7 +6,7 @@ Your agent can open a menu or dialog with Playwright, scan the rendered state wi
 
 ## Run your first audit from npm
 
-Use Node.js 22.12+ and npm. Start your own app, then run the block below from its project directory in a POSIX shell. Replace the example project path with the output of `pwd -P` and the URL with your app's address.
+Use Node.js 22.12+ and npm. Start your app. In a POSIX shell at its project root, install matching Playwright Chromium and run the npm package to collect evidence. Set `projectRoot` to the output of `pwd -P` and `url` to your running app's address in the manifest below.
 
 ```sh
 npx -y playwright@1.64.1 install chromium
@@ -54,7 +54,7 @@ The kit writes reports, records, and PNGs to local disk and has no model service
 
 ## Source verification and contributor setup
 
-From a source checkout, run `node scripts/verify-source.mjs` to check the files listed in the source manifest. For development, run `npm ci` and install the matching Chromium with the command above. The source-only `node scripts/quickstart.mjs` exercises the CLI and stdio MCP on a synthetic loopback fixture. See [source verification and earlier archive test scope](https://github.com/szboynono/a11y-agent-kit/blob/v0.1.1/docs/publication-boundary.md).
+From a source checkout, run `node scripts/verify-source.mjs` to check the files listed in the source manifest. For development, run `npm ci` and install the matching Chromium with the command above. The source-only `node scripts/quickstart.mjs` exercises the CLI and stdio MCP on a synthetic loopback fixture. See [source verification and recorded release checks](https://github.com/szboynono/a11y-agent-kit/blob/main/docs/publication-boundary.md) and [earlier archive test scope at v0.1.1](https://github.com/szboynono/a11y-agent-kit/blob/v0.1.1/docs/publication-boundary.md).
 
 The source tree also includes a [local plugin command](https://github.com/szboynono/a11y-agent-kit/blob/v0.1.1/commands/a11y-audit.md). See the [lifecycle and state machines](https://github.com/szboynono/a11y-agent-kit/blob/v0.1.1/docs/state-machines.md) and the [agent documentation index](llms.txt).
 

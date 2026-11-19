@@ -15,17 +15,17 @@ v0 supports `button-name`, `label`, and `aria-valid-attr`. State steps use `acti
 - `verify`: pass the baseline report path. The tool reuses the frozen contract rather than accepting a smaller set of checks.
 - `check`: check whether the source fingerprint for a report still matches the current files before presenting it as current evidence.
 
-Use compact JSON first:
+Set up Node.js and matching Chromium as described in [first use](first-use.md). Start with compact JSON.
 
 ```sh
-node /absolute/path/to/a11y-agent-kit/src/cli.js analyze /absolute/path/to/manifest.json --summary
-node /absolute/path/to/a11y-agent-kit/src/cli.js verify /absolute/path/to/baseline-report.json --summary
-node /absolute/path/to/a11y-agent-kit/src/cli.js check /absolute/path/to/verification-report.json --summary
+npx -y a11y-agent-kit@0.1.1 analyze /absolute/path/to/manifest.json --summary
+npx -y a11y-agent-kit@0.1.1 verify /absolute/path/to/baseline-report.json --summary
+npx -y a11y-agent-kit@0.1.1 check /absolute/path/to/verification-report.json --summary
 ```
 
 `--summary` omits raw node HTML, raw check data and successful node/assertion details. It preserves status, report identity and actionable failures. The complete local report is authoritative; read details only as needed. Nonzero exits still return JSON; a finding is not a transport failure.
 
-The optional MCP entrypoint is `node /absolute/path/to/a11y-agent-kit/src/cli.js serve`, exposing `a11y_analyze`, `a11y_verify` and `a11y_check_evidence` from a local child process. Configure it only if the host needs stdio MCP. Published input schemas are the authoritative argument shapes.
+The optional MCP entrypoint is `npx -y a11y-agent-kit@0.1.1 serve`, exposing `a11y_analyze`, `a11y_verify` and `a11y_check_evidence` from a local child process. Configure it only if the host needs stdio MCP. Published input schemas are the authoritative argument shapes.
 
 Check the MCP result's `isError` before consuming it. Tool execution returns JSON text plus `structuredContent`; the SDK's input-schema rejection uses the standard MCP error envelope with explanatory text and may omit `structuredContent`. Do not assume every text content block is JSON.
 

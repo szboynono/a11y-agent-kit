@@ -96,6 +96,12 @@ export const DNS_LOOKUP_TIMEOUT_MS = 2000;
  * (`LOOKUP_BUDGET_EXHAUSTED`) and continues on the literal-only check, so a slow resolver adds at most this much.
  */
 export const DNS_NAVIGATION_WAIT_MS = DNS_LOOKUP_TIMEOUT_MS;
+/**
+ * The least remaining navigation DNS wait worth a lookup. Callers measure the wait already spent with
+ * `performance.now()`, while a timer may fire a few milliseconds before its nominal delay, so a navigation whose wait
+ * timed out can appear to have a sliver left. Less than this counts as used up (`LOOKUP_BUDGET_EXHAUSTED`).
+ */
+export const DNS_MIN_LOOKUP_WAIT_MS = 10;
 /** Hosts whose lookup failed are remembered for the session, at most this many, and are not looked up again. */
 export const DNS_FAILED_HOST_LIMIT = 64;
 
@@ -215,8 +221,9 @@ function rememberFailedHost(failedHosts, host, error) {
  * `failedHosts` (a session Map of host to error code) makes failures sticky: a failed host is recorded there, and a
  * later request to it degrades at once with the recorded error and `skipped: 'host_failed_before'`, without waiting
  * again. `waitMs` is what is left of the navigation's DNS wait; the lookup waits at most the smaller of it and
- * `timeoutMs`. A wait of 0 or less (the navigation's DNS wait is used up) degrades at once with
- * `LOOKUP_BUDGET_EXHAUSTED` and `skipped: 'budget_exhausted'`; that host is not remembered, since it was not tried.
+ * `timeoutMs`. A `waitMs` under `DNS_MIN_LOOKUP_WAIT_MS` (the navigation's DNS wait is used up), or a wait of 0 or
+ * less, degrades at once with `LOOKUP_BUDGET_EXHAUSTED` and `skipped: 'budget_exhausted'`; that host is not
+ * remembered, since it was not tried.
  * A lookup that times out only because `waitMs` cut its wait short is not remembered either: it was not given its
  * full bound, so a later navigation looks the host up again instead of skipping it.
  */
@@ -228,7 +235,7 @@ export async function resolveNavigationTarget({ url, policy, resolver = systemHo
   const known = failedHosts instanceof Map ? failedHosts.get(host) : undefined;
   if (known !== undefined) return degraded(known, 'host_failed_before');
   const bound = Math.min(timeoutMs, DNS_LOOKUP_TIMEOUT_MS), wait = Math.min(bound, waitMs);
-  if (!(wait > 0)) return degraded('LOOKUP_BUDGET_EXHAUSTED', 'budget_exhausted');
+  if (!(waitMs >= DNS_MIN_LOOKUP_WAIT_MS) || !(wait > 0)) return degraded('LOOKUP_BUDGET_EXHAUSTED', 'budget_exhausted');
   const failed = error => { rememberFailedHost(failedHosts, host, error); return degraded(error); };
   let answers;
   try { answers = await boundedLookup(resolver, host, wait); }

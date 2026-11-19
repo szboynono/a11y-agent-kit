@@ -283,8 +283,8 @@
     },
     {
       "path": "src/audit/report-html.js",
-      "bytes": 35726,
-      "sha256": "cc41a21f788beec6acb984bbf28c71aafbd471c2d56b16646475167d95b91793"
+      "bytes": 69450,
+      "sha256": "19e980db99f4f7bfff6da51ab5b505366ec43725eb02be596368540a954f6ceb"
     },
     {
       "path": "src/audit/review-policy.js",
@@ -513,8 +513,8 @@
     },
     {
       "path": "test/audit-report-html.test.js",
-      "bytes": 35305,
-      "sha256": "37f5e30738832ad3d42ac285418155471bdfd751f7e81dcd7a9e6ea9095f400a"
+      "bytes": 45869,
+      "sha256": "e44d1b0d6427ff28d4c5880a082654389320a0b617cf6b70c93152ec387a6960"
     },
     {
       "path": "test/audit-request-budget.test.js",
@@ -528,8 +528,8 @@
     },
     {
       "path": "test/audit-stable-selector.test.js",
-      "bytes": 15316,
-      "sha256": "44a47d931b7abe223cd89f80e5f5ed78c09629237f7cb7f4d26f124ca8d63c91"
+      "bytes": 15375,
+      "sha256": "1482395694729c2d417506eb4ec3169ed53c37a422c62a3861ba7330eb3a0ce4"
     },
     {
       "path": "test/audit-standard.test.js",

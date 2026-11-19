@@ -143,7 +143,7 @@ test('agent targets carry stableSelector in inspect rows, checkpoint/submit ACKs
   const forged = await saveAuditDocument(agent.directory, 'audit-proposal', { ...stored, verificationQueue: stored.verificationQueue.map(row => ({ ...row, targetObservation: { ...row.targetObservation, stableSelector: 'body' } })) });
   assert.equal((await checkAudit(forged.reportPath)).status, 'error');
   const html = renderAuditReportHtml(stored);
-  assert.match(html, /<dt>Reproduce<\/dt><dd><ol><li>Open <code>http:\/\/127\.0\.0\.1:\d+\/<\/code> and bring it to the state recorded in evidence <code>ev-0001<\/code>\.<\/li>/);
+  assert.match(html, /<summary>Reproduce <span class="dm">\(2 steps\)<\/span><\/summary><div class="db"><ol><li>Open <code>http:\/\/127\.0\.0\.1:\d+\/<\/code> and bring it to the state recorded in evidence <code>ev-0001<\/code>\.<\/li>/);
   assert.ok(html.includes('Find the element with <code>div.card</code> (unique-anchor; unique in the page&#39;s whole DOM when captured).'));
 });
 

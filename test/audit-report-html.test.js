@@ -9,7 +9,7 @@ import { deflateSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { openAuditAgent } from '../src/audit/agent.js';
 import { reviewAudit } from '../src/audit/review.js';
-import { REPORT_LIMITS, renderBoundedAuditReportHtml, loadReportContext, normalizeAuditReport, renderAuditReportHtml, writeAuditReport } from '../src/audit/report-html.js';
+import { REPORT_LIMITS, REPORT_CSS, REPORT_TOKENS, REPORT_CONTRAST_PAIRS, criterionName, renderBoundedAuditReportHtml, loadReportContext, normalizeAuditReport, renderAuditReportHtml, writeAuditReport } from '../src/audit/report-html.js';
 import { fixture } from './helpers.js';
 
 const SENTINEL = 'SECRET_VALUE_SENTINEL_5519';
@@ -40,8 +40,9 @@ test('renders summary, SC grouping, source and status per finding, and the not-a
   assert.match(html, /Untested scope and limits/); assert.match(html, /Screen readers .* were not used/);
   const order = ['SC 1.1.1', 'SC 1.4.3', 'SC 1.4.10', 'SC 4.1.2'].map(label => html.indexOf(label));
   assert.ok(order.every(position => position > 0) && order.join() === [...order].sort((x, y) => x - y).join(), `numeric SC order: ${order}`);
-  assert.match(html, /<b>5<\/b>findings/); assert.match(html, /<b>2<\/b>confirmed/); assert.match(html, /<b>2<\/b>needs review/);
-  assert.match(html, /<b>1<\/b>axe-adopted/); assert.match(html, /<b>4<\/b>agent-found/); assert.match(html, /<b>4<\/b>success criteria affected/);
+  assert.match(html, /<b>5<\/b><span>findings/); assert.match(html, /Confirmed<\/dt><dd>2<\/dd>/); assert.match(html, /Needs review<\/dt><dd>2<\/dd>/);
+  assert.match(html, /Rejected<\/dt><dd>1<\/dd>/);
+  assert.match(html, /axe-adopted<\/dt><dd>1<\/dd>/); assert.match(html, /agent-found<\/dt><dd>4<\/dd>/); assert.match(html, /<b>4<\/b><span>with findings/);
   const card = id => html.slice(html.indexOf(`id="f-${id}"`), html.indexOf('</article>', html.indexOf(`id="f-${id}"`)));
   assert.match(card('a'), /Confirmed/); assert.match(card('a'), /axe-adopted/); assert.match(card('a'), /<code>#a<\/code>/); assert.match(card('a'), /Observation a/);
   assert.match(card('b'), /Needs review/); assert.match(card('b'), /Review verdict<\/dt><dd>insufficient/); assert.match(card('b'), /Needs more for b/); assert.match(card('b'), /agent-found/);
@@ -74,10 +75,12 @@ test('page-derived strings are escaped everywhere and unsafe links are never emi
   const html = renderAuditReportHtml(report);
   assert.equal(html.includes('<script'), false); assert.equal(html.includes('<img src=x'), false);
   const tags = html.match(/<[^>]*>/g).map(tag => tag.replace(/^<\/?([a-z0-9]+)[\s\S]*$/i, '$1').toLowerCase());
-  assert.deepEqual([...new Set(tags)].filter(tag => !['<!doctype html>', 'html', 'head', 'meta', 'title', 'style', 'body', 'header', 'h1', 'h2', 'h3', 'h4', 'p', 'strong', 'dl', 'dt', 'dd', 'code', 'main', 'section', 'ul', 'ol', 'li', 'b', 'article', 'span', 'small', 'a', 'footer'].includes(tag)), [], 'only fixed markup is emitted');
-  assert.equal(/<[a-z]+[^>]*\s(?:on\w+|src|href)=[^>]*>/i.test(html.replace(/<meta[^>]*>/, '')), false);
+  assert.deepEqual([...new Set(tags)].filter(tag => !['<!doctype html>', 'html', 'head', 'meta', 'title', 'style', 'body', 'header', 'h1', 'h2', 'h3', 'h4', 'p', 'strong', 'dl', 'dt', 'dd', 'code', 'main', 'section', 'ul', 'ol', 'li', 'b', 'article', 'span', 'small', 'a', 'footer',
+    'div', 'nav', 'details', 'summary', 'table', 'caption', 'thead', 'tbody', 'tr', 'th', 'td', 'time', 'i'].includes(tag)), [], 'only fixed markup is emitted');
+  assert.equal(/<[a-z]+[^>]*\s(?:on\w+|src)=[^>]*>/i.test(html.replace(/<meta[^>]*>/, '')), false);
+  assert.deepEqual([...html.matchAll(/\shref="([^"]*)"/g)].map(hit => hit[1]).filter(href => !/^#[\w.:-]+$/.test(href)), [], 'only same-document fragment links');
   assert.ok(html.includes('&lt;script&gt;alert(1)&lt;/script&gt;'));
-  assert.equal(html.includes('javascript:alert(4)'), false); assert.equal(/<a href=/.test(html), false);
+  assert.equal(html.includes('javascript:alert(4)'), false); assert.equal(/<a href="(?!#)/.test(html), false);
   const safe = renderAuditReportHtml({ ...report, coverage: [{ id: '4.1.2', level: 'AA', url: 'https://www.w3.org/TR/WCAG22/#robust' }] });
   assert.match(safe, /<a href="https:\/\/www\.w3\.org\/TR\/WCAG22\/#robust" rel="noreferrer noopener">SC 4\.1\.2/);
   assert.equal(/<a href="https:\/\/www\.w3\.org[^"]*"[^>]*>[^<]*<\/a>/.test(safe), true);
@@ -91,7 +94,7 @@ test('long text and huge finding lists are capped', () => {
   const page = renderAuditReportHtml({ ...reviewed(many), verificationQueue: [] });
   assert.equal(page.match(/<article class="finding"/g).length, REPORT_LIMITS.findings);
   assert.match(page, new RegExp(`Showing the first ${REPORT_LIMITS.findings} of ${REPORT_LIMITS.findings + 5} findings`));
-  assert.match(page, new RegExp(`<b>${REPORT_LIMITS.findings + 5}</b>findings`));
+  assert.match(page, new RegExp(`<b>${REPORT_LIMITS.findings + 5}</b><span>findings`));
 });
 
 test('rejects files that are not audit checkpoints, proposals or reviews', () => {
@@ -222,12 +225,13 @@ for (const size of [0, 1, 50, 51, 975]) {
     for (const page of pages) {
       assert.ok(Buffer.byteLength(page.html, 'utf8') < 500000);
       assert.ok((page.html.match(/<article class="finding"/g) ?? []).length <= 50);
-      assert.match(page.html, new RegExp(`<b>${size}</b>findings`));
-      assert.match(page.html, new RegExp(`<b>${Math.floor(size / 2)}</b>axe-adopted`));
+      assert.match(page.html, new RegExp(`<b>${size}</b><span>findings`));
+      assert.match(page.html, new RegExp(`axe-adopted</dt><dd>${Math.floor(size / 2)}</dd>`));
       assert.match(page.html, /Not a conformance certification/);
       assert.match(page.html, /Screen readers .* were not used/);
       assert.doesNotMatch(page.html, /<script|<link|<iframe|<img/);
-      for (const [, href] of page.html.matchAll(/href="([^"]+)"/g)) assert.ok(pages.some(other => other.name === href), href);
+      const ids = new Set([...page.html.matchAll(/\sid="([^"]+)"/g)].map(hit => hit[1]));
+      for (const [, href] of page.html.matchAll(/href="([^"]+)"/g)) assert.ok(pages.some(other => other.name === href) || (href.startsWith('#') && ids.has(href.slice(1))), href);
     }
     assert.equal((pages[0].html.match(/href="findings-\d+\.html"/g) ?? []).length, pages.length - 1);
     for (const page of pages.slice(1)) assert.match(page.html, /href="index.html"/);
@@ -413,7 +417,7 @@ test('queue verdict stays distinct from product status for all seven reviewed ro
   const report = reviewed(findings, { confirmed: findings.slice(0, 5).map(f => f.id), queue: findings.slice(5).map(f => f.id),
     decisions: findings.map((f, i) => decision(f.id, i < 5 ? 'supported' : 'insufficient')) });
   const html = renderAuditReportHtml(report);
-  assert.match(html, /<b>5<\/b>confirmed/); assert.match(html, /<b>0<\/b>rejected/); assert.match(html, /<b>7<\/b>needs review/);
+  assert.match(html, /Confirmed<\/dt><dd>5<\/dd>/); assert.match(html, /Rejected<\/dt><dd>0<\/dd>/); assert.match(html, /Needs review<\/dt><dd>7<\/dd>/);
   assert.equal((html.match(/badge s-needs_review/g) ?? []).length, 7);
   assert.equal((html.match(/Review verdict<\/dt><dd>insufficient/g) ?? []).length, 7);
   for (const f of findings.slice(5)) assert.ok(html.includes(`Reviewer ${f.id}`));
@@ -428,8 +432,8 @@ test('inventory and original attachment paths are separate from finding counts a
   assert.equal((html.match(/class="inventory-row"/g) ?? []).length, 11);
   assert.match(html, /Author disposition<\/dt><dd>unresolved/); assert.match(html, /Adopted as/);
   assert.match(html, /Not explicitly linked/); assert.match(html, /DOM binding<\/dt><dd>bound/);
-  assert.match(html, /not additional defects/); assert.match(html, /<b>1<\/b>findings/);
-  assert.match(html, /\.\.\/original\/ev-0001.json/); assert.match(html, /\.\.\/original\/ev-0001.png/);
+  assert.match(html, /not additional defects/); assert.match(html, /<b>1<\/b><span>findings/);
+  assert.match(html, /relative to <code class="base">\.\.\/original\/<\/code>/); assert.match(html, /<td><code>ev-0001\.json<\/code><\/td><td><code>ev-0001\.png<\/code><\/td>/);
   assert.equal(html.includes('<script>'), false); assert.equal(html.includes('<img '), false);
   assert.match(renderAuditReportHtml(report), /Original JSON path not recorded/);
   assert.equal(renderAuditReportHtml(report).includes('class="inventory-row"'), false);
@@ -453,4 +457,121 @@ test('loader uses recorded collection paths relative to output and does not inve
   const missing = await loadReportContext(path.join(dir, 'reviewed.json'), report);
   assert.equal(missing.references.length, 0); assert.equal(missing.inventory.length, 0);
   assert.match(renderAuditReportHtml(report, missing), /Referenced collection unavailable/);
+});
+
+// Report layout: landmarks, headings, disclosures, tables and styling constraints, checked on the rendered markup.
+function structure(html) {
+  const headings = [...html.matchAll(/<h([1-6])[\s>]/g)].map(hit => Number(hit[1]));
+  const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map(hit => hit[1]);
+  return { headings, ids, idSet: new Set(ids),
+    labelledby: [...html.matchAll(/aria-labelledby="([^"]+)"/g)].map(hit => hit[1]),
+    hrefs: [...html.matchAll(/\shref="([^"]+)"/g)].map(hit => hit[1]) };
+}
+
+test('layout has one skip link to a single main, ordered headings, resolvable labels and links, and one disclosure per collapsed field', () => {
+  const findings = [finding('a', '4.1.2', { source: 'axe', axeCandidateId: 'ev-0001:rule:0' }), finding('b', '1.4.3'), finding('c', '1.4.3')];
+  const report = reviewed(findings, { confirmed: ['a'], queue: ['b'], decisions: [decision('a'), decision('b', 'insufficient')] });
+  const inventory = [{ observationId: 'obs0', evidenceId: 'ev-0001', ruleId: 'rule', ruleNodeIndex: 0, bucket: 'violations', target: ['#a'], binding: { status: 'bound' } }];
+  const references = [{ evidenceId: 'ev-0001', json: 'run/ev-0001.json', png: null, source: 'collection.records' }];
+  const html = renderAuditReportHtml(report, { inventory, references, imageNotes: ['Screenshots were not embedded (use --screenshots).'] });
+  const { headings, ids, idSet, labelledby, hrefs } = structure(html);
+  assert.ok(html.indexOf('<a class="skip" href="#main">') < html.indexOf('<a ', html.indexOf('<a class="skip"') + 1), 'skip link is the first link');
+  assert.equal((html.match(/<main[\s>]/g) ?? []).length, 1); assert.match(html, /<main id="main" tabindex="-1">/);
+  assert.equal((html.match(/<header class="masthead">/g) ?? []).length, 1); assert.equal((html.match(/<footer/g) ?? []).length, 1);
+  assert.equal(headings[0], 1); assert.equal(headings.filter(level => level === 1).length, 1);
+  headings.forEach((level, i) => assert.ok(i === 0 || level <= headings[i - 1] + 1, `heading h${level} after h${headings[i - 1]}`));
+  assert.equal(ids.length, idSet.size, 'unique ids');
+  for (const id of labelledby) assert.ok(idSet.has(id), `aria-labelledby ${id}`);
+  for (const href of hrefs) assert.ok(href.startsWith('#') ? idSet.has(href.slice(1)) : /^https:\/\/www\.w3\.org\//.test(href), href);
+  // Reproduce, Why and Evidence on every card, Missing only where something is missing, plus the inventory box.
+  const expected = findings.length * 3 + normalizeAuditReport(report).findings.filter(row => row.missing.length).length + 1;
+  assert.equal((html.match(/<details[\s>]/g) ?? []).length, expected);
+  assert.equal((html.match(/<summary>/g) ?? []).length, expected);
+  assert.match(html, /<summary>Why it may fail the criterion <span class="dm">\(author&#39;s claim\)<\/span><\/summary>/);
+  assert.match(html, /<details class="box"><summary>Show all 1 observation record<\/summary>/);
+  for (const table of html.match(/<table>[\s\S]*?<\/table>/g)) {
+    assert.match(table, /^<table><caption>/); assert.match(table, /<th scope="col">/); assert.match(table, /<th scope="row">/);
+    assert.doesNotMatch(table, /<th>/);
+  }
+  assert.equal((html.match(/<table>/g) ?? []).length, 2);
+  // Status and source are carried by text as well as colour.
+  assert.match(html, /<li class="badge s-confirmed status">Confirmed<\/li>/); assert.match(html, /<span class="k">Source:<\/span> axe-adopted/);
+  assert.match(html, /<div class="bar" aria-hidden="true">/);
+  assert.doesNotMatch(html, /<script|<link|<iframe|@import|url\(/i);
+  assert.doesNotMatch(html, /\d(?:s|d|l)?vh\b/);
+  assert.match(html, /default-src 'none'; img-src data:; style-src 'unsafe-inline'/);
+  assert.match(html, /<dt>Review verdict<\/dt><dd>supported<\/dd>/, 'review outcomes stay outside disclosures');
+});
+
+const luminance = hex => {
+  const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(c => c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+const contrast = (a, b) => { const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05); };
+
+test('every drawn colour pair meets its WCAG ratio in light and dark, computed from the same tokens the CSS uses', () => {
+  assert.equal(REPORT_CONTRAST_PAIRS.length, 32);
+  for (const theme of ['light', 'dark']) {
+    const tokens = REPORT_TOKENS[theme];
+    for (const [fg, bg, role, required] of REPORT_CONTRAST_PAIRS) {
+      assert.ok(tokens[fg] && tokens[bg], `${theme} ${fg}/${bg}`);
+      const ratio = contrast(tokens[fg], tokens[bg]);
+      assert.ok(ratio >= required, `${theme} ${role}: ${fg} on ${bg} is ${ratio.toFixed(2)}:1, needs ${required}:1`);
+    }
+    for (const [name, value] of Object.entries(tokens)) assert.ok(REPORT_CSS.includes(`--${name}:${value}`), `${theme} --${name}`);
+  }
+  assert.deepEqual(Object.keys(REPORT_TOKENS.light), Object.keys(REPORT_TOKENS.dark));
+  assert.match(REPORT_CSS, /@media \(prefers-color-scheme:dark\)/); assert.match(REPORT_CSS, /@media \(forced-colors:active\)/);
+  assert.match(REPORT_CSS, /@media \(prefers-reduced-motion:reduce\)/); assert.match(REPORT_CSS, /@media print\{details::details-content\{content-visibility:visible/);
+  assert.ok(renderAuditReportHtml(reviewed([])).includes(REPORT_CSS));
+});
+
+test('criterion names come from the catalog, then the static WCAG table, else only the number', async () => {
+  for (const file of ['wcag21-aa.json', 'wcag22-aa.json']) {
+    const catalog = JSON.parse(await fs.readFile(fileURLToPath(new URL(`../src/${file}`, import.meta.url)), 'utf8'));
+    for (const row of catalog.criteria) assert.ok(criterionName(row.id, row), `${file} ${row.id}`);
+  }
+  assert.equal(criterionName('4.1.2', {}), 'Name, Role, Value');
+  assert.equal(criterionName('4.1.2', { title: 'Catalog title' }), 'Catalog title');
+  assert.equal(criterionName('9.9.9', {}), null); assert.equal(criterionName('__proto__', {}), null);
+  const report = reviewed([finding('a', '4.1.2'), finding('b', '9.9.9')]);
+  report.coverage = [...coverage, { id: '9.9.9', level: 'AA', url: 'https://www.w3.org/TR/WCAG22/#x' }];
+  const html = renderAuditReportHtml(report);
+  assert.match(html, /<h3 id="sc-4\.1\.2"><a href="https:\/\/www\.w3\.org\/TR\/WCAG22\/#sc4\.1\.2" rel="noreferrer noopener">SC 4\.1\.2<\/a> <span class="sc-name">Name, Role, Value<\/span><\/h3>/);
+  assert.match(html, /<h3 id="sc-9\.9\.9"><a href="[^"]+" rel="noreferrer noopener">SC 9\.9\.9<\/a><\/h3>/);
+  report.coverage[3] = { ...report.coverage[3], title: '<Catalog> name' };
+  assert.match(renderAuditReportHtml(report), /<span class="sc-name">&lt;Catalog&gt; name<\/span>/);
+});
+
+test('evidence source paths share a caption directory only when every path has it; otherwise rows keep full paths', () => {
+  const report = reviewed([finding('a', '4.1.2')]);
+  const shared = renderAuditReportHtml(report, { references: [
+    { evidenceId: 'ev-0001', json: '../run/ev-0001.json', png: '../run/ev-0001.png', source: 'collection.records' },
+    { evidenceId: 'ev-0002', json: '../run/ev-0002.json', png: null, source: 'collection.records' }] });
+  assert.match(shared, /Source for every row: <code>collection\.records<\/code>\. File names below are relative to <code class="base">\.\.\/run\/<\/code>/);
+  assert.match(shared, /<th scope="row"><code>ev-0002<\/code><\/th><td><code>ev-0002\.json<\/code><\/td><td class="na">Original PNG path not recorded<\/td>/);
+  const mixed = renderAuditReportHtml(report, { references: [
+    { evidenceId: 'ev-0001', json: '../run/ev-0001.json', png: '../other/ev-0001.png', source: 'collection.records' },
+    { evidenceId: 'ev-0002', json: null, png: null, source: 'input report attachment metadata' }] });
+  assert.match(mixed, /Each row names its source\. Paths are shown in full\./);
+  assert.match(mixed, /<th scope="col">Source<\/th>/);
+  assert.match(mixed, /<td><code>\.\.\/run\/ev-0001\.json<\/code><\/td><td><code>\.\.\/other\/ev-0001\.png<\/code><\/td>/);
+  assert.doesNotMatch(mixed, /class="base"/);
+  const flat = renderAuditReportHtml(report, { references: [{ evidenceId: 'ev-0001', json: 'ev-0001.json', png: 'ev-0001.png', source: 's' }] });
+  assert.match(flat, /Paths are shown in full\./); assert.match(flat, /<code>ev-0001\.json<\/code>/);
+});
+
+test('inventory is collapsed behind derived counts and adoption links reach cards in the same document only', () => {
+  const report = reviewed([finding('adopted', '4.1.2', { source: 'axe', axeCandidateId: 'ev-0001:rule:0' })]);
+  const inventory = [0, 1].map(i => ({ observationId: `obs${i}`, evidenceId: 'ev-0001', ruleId: 'rule', ruleNodeIndex: i, bucket: 'violations', target: ['#x'],
+    binding: { status: i ? 'unbound' : 'bound' }, authorDisposition: i ? { status: 'linked', findingIds: ['adopted'] } : { status: 'unresolved' } }));
+  const html = renderAuditReportHtml(report, { inventory });
+  assert.match(html, /<ul class="inv-stats" aria-label="Inventory counts"><li><b>2<\/b> observations<\/li><li><b>1<\/b> DOM-bound<\/li><li><b>1<\/b> adopted as findings<\/li><li><b>1<\/b> explicitly linked<\/li><li><b>1<\/b> disposition unresolved<\/li><\/ul>/);
+  assert.ok(html.indexOf('<details class="box">') < html.indexOf('class="inventory-row"'));
+  assert.doesNotMatch(html, /<details class="box" open/);
+  assert.match(html, /Adopted as <a href="#f-adopted">adopted<\/a> \(from axeCandidateId\)/);
+  const [, detail] = renderBoundedAuditReportHtml(report, { inventory });
+  assert.match(detail.html, /Adopted as adopted \(from axeCandidateId\)/);
+  assert.match(detail.html, /<article class="finding" id="f-adopted" aria-labelledby="ft-adopted">/);
+  assert.match(detail.html, /<h3 id="rec-1"><span class="sc-id">SC 4\.1\.2<\/span> <span class="sc-name">Name, Role, Value<\/span><\/h3><span class="sc-meta">Level AA · original record 1 of 1<\/span>/);
 });

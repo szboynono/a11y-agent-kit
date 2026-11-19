@@ -37,6 +37,9 @@ export const AUDIT_RECORD_FIELDS = Object.freeze([
 // Reserve room for the caller's audit ID, budget, and tool envelope. The caller
 // must still run boundAuditResponse after adding its final text metadata.
 const inlineLimit = 1024;
+// The additive navigation payload of a blocked navigation is projected beside the error, under its own bound,
+// so the 0.1.1 error keys keep their inline/deferred decision. Typical payloads are under 1.5 KiB.
+const navigationInlineLimit = 4096;
 const cursorKey = randomBytes(32);
 const optionsKeys = new Set(['runId', 'view', 'nodeIds', 'fields', 'cursor', 'limit', 'field', 'nodeId', 'offset']);
 const nodeFields = new Set(AUDIT_NODE_FIELDS);
@@ -252,6 +255,10 @@ function captureStateDifference(record) {
 
 function summary(record, options, base, index) {
   const read = field => handle(options, { view: 'field', field });
+  // A record error's navigation key is additive: the remaining keys are inlined (or deferred) exactly as before,
+  // and errorNavigation carries the payload in the same response. The /error field read still returns both.
+  const { navigation: errorNavigation, ...legacyError } = isObject(record.error) ? record.error : {};
+  const hasNavigation = errorNavigation !== undefined;
   const observation = part => record[part] ? {
     viewport: record[part].viewport ?? null, scroll: record[part].scroll ?? null,
     active: record[part].active?.nodeId ? { nodeId: record[part].active.nodeId, read: handle(options, { view: 'nodes', nodeIds: [record[part].active.nodeId] }) } : null,
@@ -266,7 +273,10 @@ function summary(record, options, base, index) {
         ? { ...inlineOrHandle(record.result.capture, read('/result/capture')), stateDifference: captureStateDifference(record) }
         : inlineOrHandle(record.result?.capture, read('/result/capture')),
       contrast: inlineOrHandle(record.result?.contrast, read('/result/contrast')) },
-    error: inlineOrHandle(record.error, read('/error')),
+    error: inlineOrHandle(hasNavigation ? legacyError : record.error, read('/error')),
+    // Above 4 KiB the handle's serializedBytes counts navigation alone; the /error read it points to also returns
+    // the 0.1.1 keys, so it is larger. /error is the only record field that holds navigation.
+    ...(hasNavigation ? { errorNavigation: inlineOrHandle(errorNavigation, read('/error'), navigationInlineLimit) } : {}),
     nodeSources: index.sources,
     retrieval: { nodes: handle(options, { view: 'nodes' }),
       recordFields: AUDIT_RECORD_FIELDS.filter(field => field.split('/').slice(1).reduce((value, key) => own(value, key) ? value[key] : undefined, record) !== undefined)

@@ -1,3 +1,5 @@
+import { boundNavigationDetails } from './navigation.js';
+
 // Bounded, field-level validation detail for agent and MCP error responses.
 // Paths come from our own schemas; only issue messages from our schemas or zod are kept,
 // and unknown keys a caller sent are named only when they belong to a fixed vocabulary.
@@ -82,6 +84,9 @@ export function proposalFindingHint(details) {
 export function errorPayload(error, { messageLimit = 1500 } = {}) {
   const code = String(error?.code ?? 'AUDIT_AGENT_ERROR').slice(0, 80);
   const payload = { code, message: String(error?.message ?? error).slice(0, messageLimit) };
+  // A blocked navigation keeps its 0.1.1 code; the structured facts are the additive `navigation` key.
+  const navigation = boundNavigationDetails(error?.navigation);
+  if (navigation) payload.navigation = navigation;
   const bounded = boundErrorIssues(error?.details);
   if (!bounded) return payload;
   const hint = code === 'INVALID_AUDIT_PROPOSAL' ? proposalFindingHint(error.details) : null;

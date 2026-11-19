@@ -3,6 +3,7 @@ import * as fs from 'node:fs/promises';
 import { digest, errorRecord, EXECUTION_POLICY, fingerprint, monitorSource, ToolError } from '../evidence.js';
 import { AUDIT_SCHEMA_VERSION, resolveAuditStandard, DEFAULT_AUDIT_SELECTION, parseAuditManifest } from './schema.js';
 import { AuditBrowser } from './browser.js';
+import { withNavigation } from './navigation.js';
 import { createAuditDirectory, writeAuditArtifact, saveAuditDocument } from './store.js';
 import { pngDimensions } from './pixels.js';
 import { AUDIT_EVIDENCE_POLICY } from './policy.js';
@@ -132,6 +133,7 @@ export async function openAuditSession(input, lifecycle = {}) {
         applicationBinding: 'caller-declared', applicationBindingNote: 'The caller declares that this URL serves projectRoot. Source-to-build or deployment provenance is not attested.',
         codeFingerprint: sourceBefore, codeFingerprintAfterRun: sourceAfter, sourceStability,
         ...(manifest.networkReplay ? { networkReplay: browser.networkReplayReport() } : {}),
+        ...(browser.navigationReport ? { navigation: browser.navigationReport() } : {}),
         executionPolicy: { mode: 'persistent-local-context', locatorTimeoutMs: 3000, navigationTimeoutMs: 15000, waitUntil: 'domcontentloaded', serviceWorkers: 'block', navigationOrigin: new URL(manifest.url).origin, axeTags: [...browser.axeTags], screenshotStateBinding: 'matching before/after observed state IDs', screenshotAnimations: 'disabled', screenshotCaret: 'initial', finiteAnimationSettleMs: 1500, keyboardMethod: 'global-page-keyboard-without-selector-focus', wallBudgetIncludesIdle: true },
         liveSession: { protocol: 'audit-live-1', sealed: true, complete: false, termination: terminal ?? ending, deadlineAt: new Date(deadline).toISOString(), contextCount: versions.browser ? 1 : 0, replays: 0, invalidRequests },
         assessment: { status: 'incomplete', wholeCriteriaAssessed: 0, wholePage: 'not_assessed', complete: false },
@@ -268,6 +270,8 @@ export async function openAuditSession(input, lifecycle = {}) {
       throw error;
     }
     const report = await finish({ reason: error.code === 'AUDIT_WALL_BUDGET_EXCEEDED' ? 'wall_budget_exhausted' : 'startup_error' });
-    throw new ToolError('AUDIT_SESSION_START_FAILED', 'The live session could not open; its incomplete report was retained.', { reportPath: report.reportPath });
+    const failed = new ToolError('AUDIT_SESSION_START_FAILED', 'The live session could not open; its incomplete report was retained.', { reportPath: report.reportPath });
+    // A blocked start navigation adds its structured payload (with the report path) without changing code or details.
+    throw withNavigation(failed, error.navigation ? { ...error.navigation, reportPath: report.reportPath } : null);
   }
 }

@@ -129,6 +129,7 @@ export async function collectAudit(input) {
     applicationBinding: 'caller-declared', applicationBindingNote: 'The caller declares that this URL serves projectRoot. Source-to-build or deployment provenance is not attested.',
     codeFingerprint: sourceBefore, codeFingerprintAfterRun: sourceAfter, sourceStability,
     ...(manifest.networkReplay ? { networkReplay: browser.networkReplayReport() } : {}),
+    navigation: browser.navigationReport(),
     executionPolicy: { actionTimeoutMs: 3000, navigationTimeoutMs: 15000, waitUntil: 'domcontentloaded', serviceWorkers: 'block', navigationOrigin: new URL(manifest.url).origin, axeTags: [...browser.axeTags], screenshotStateBinding: 'matching before/after observed state IDs', screenshotAnimations: 'disabled', screenshotCaret: 'initial', finiteAnimationSettleMs: 1500, keyboardMethod: 'global-page-keyboard-without-selector-focus' },
     plan: plan.map((action, index) => ({ evidenceId: `ev-${String(index + 1).padStart(4, '0')}`, ...retainedAction(action) })),
     summary: { plannedActions: plan.length, executedActions, successfulActions: records.filter(record => record.success).length, failedActions: records.filter(record => !record.success && record.result?.status !== 'not_run').length, notRunActions: records.filter(record => record.result?.status === 'not_run').length, candidates: candidates.length, wholeCriteriaAssessed: 0, conformanceStatus: 'not_assessed', durationMs: Date.now() - started },

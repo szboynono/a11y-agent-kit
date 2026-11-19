@@ -49,7 +49,7 @@ export function registerAuditTools(server, { runtimeProfile, openAgent = openAud
   const result = async action => {
     let value, image;
     try { value = await action(); if (value?.[inlineReply]) { image = value.block; value = value.metadata; } }
-    catch (error) { value = { success: false, error: errorPayload({ code: error.code ?? 'AUDIT_MCP_ERROR', message: error.message ?? String(error), details: error.details }), ...(profile ? { budget: profile.budget(), complete: false } : {}) }; }
+    catch (error) { value = { success: false, error: errorPayload({ code: error.code ?? 'AUDIT_MCP_ERROR', message: error.message ?? String(error), details: error.details, navigation: error.navigation }), ...(profile ? { budget: profile.budget(), complete: false } : {}) }; }
     if (profile) value = { ...value, ...(value?.budget && value.budget.authority !== 'shared-ledger' ? { nativeBudgetDiagnostic: value.budget } : {}), budget: profile.budget() };
     value = boundAuditResponse(value, MCP_TEXT_LIMIT);
     return { content: [{ type: 'text', text: JSON.stringify(value) }, ...(image && value.success === true ? [image] : [])], structuredContent: value, isError: value.success === false };

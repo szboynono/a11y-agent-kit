@@ -69,8 +69,32 @@ export function normalizeAuditReport(report) {
     auditor: source.auditor?.name, reviewer: report.reviewer?.name, createdAt: report.createdAt, runId: report.runId,
     reportDigest: report.reportDigest ?? report.checkpointDigest,
     errors: array(report.errors),
-    url: report.manifest?.url,
+    ...pageUrls(report),
   };
+}
+
+const sameHref = (a, b) => { try { return new URL(a).href === new URL(b).href; } catch { return a === b; } };
+
+/** Page = the landed URL when a navigation record exists; the declared URL is kept beside it when they differ. */
+function pageUrls(report) {
+  const declared = typeof report.manifest?.url === 'string' ? report.manifest.url : undefined;
+  const navigation = report.navigation && typeof report.navigation === 'object' ? report.navigation : null;
+  if (!navigation) return { url: declared };
+  const final = typeof navigation.finalUrl === 'string' ? navigation.finalUrl : null;
+  const redirects = Number.isSafeInteger(navigation.redirects) && navigation.redirects >= 0 ? navigation.redirects : null;
+  return { url: final ?? declared, navigationRecorded: true, finalUrlRecorded: Boolean(final),
+    ...(declared && (!final || !sameHref(final, declared)) ? { declaredUrl: declared, redirects } : {}) };
+}
+
+/** Header rows for the audited page: final URL, declared URL when different, and the caller-declared binding note. */
+function pageRows(model, clip) {
+  const rows = [['Page', model.url ? `${esc(clip(model.url, 500))}${model.navigationRecorded && !model.finalUrlRecorded ? ' (declared URL; no final URL was recorded)' : ''}` : 'not recorded']];
+  if (model.declaredUrl && model.finalUrlRecorded) {
+    const hops = model.redirects === null ? '' : ` (redirected ${model.redirects} hop${model.redirects === 1 ? '' : 's'} to the page above)`;
+    rows.push(['Declared URL', `${esc(clip(model.declaredUrl, 500))}${hops}`]);
+  }
+  if (model.navigationRecorded) rows.push(['URL binding', 'Caller-declared: the caller declares that the declared URL serves the audited project root. Source-to-build or deployment provenance is not attested.']);
+  return rows;
 }
 
 function untestedScope(model) {
@@ -160,7 +184,7 @@ function renderReportDocument(report, { images = new Map(), imageNotes = [], sel
     return `<section aria-labelledby="sc-${esc(clip(id, 20).replace(/[^\w.-]/g, '_'))}"><h3 id="sc-${esc(clip(id, 20).replace(/[^\w.-]/g, '_'))}">${url ? `<a href="${esc(url)}" rel="noreferrer noopener">${heading}</a>` : heading} <small>${list.length} finding${list.length === 1 ? '' : 's'}</small></h3>${list.map(finding => renderFinding(finding, images, embedded, model.url)).join('\n')}</section>`;
   });
   const meta = [
-    ['Standard', std], ['Page', model.url ? esc(clip(model.url, 500)) : 'not recorded'],
+    ['Standard', std], ...pageRows(model, clip),
     ['Auditor', esc(clip(model.auditor ?? 'not recorded', 200))], ...(model.reviewer ? [['Reviewer', esc(clip(model.reviewer, 200))]] : []),
     ['Created', esc(clip(model.createdAt ?? 'not recorded', 40))], ['Run', `<code>${esc(clip(model.runId ?? 'unknown', 80))}</code>`],
     ['Source file kind', `<code>${esc(model.kind)}</code>`], ['Digest', `<code>${esc(clip(model.reportDigest ?? 'none', 100))}</code>`],

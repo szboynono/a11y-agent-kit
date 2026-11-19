@@ -5,6 +5,7 @@ import { digest, ToolError } from '../evidence.js';
 import { zodIssueDetails } from './error-details.js';
 import { networkReplayDescriptorSchema } from './network-replay.js';
 import { NONTEXT_PARTS } from './nontext.js';
+import { canonicalOrigin, httpsUpgradeOrigin, isBareOrigin } from './navigation.js';
 
 export const AUDIT_SCHEMA_VERSION = 'audit-1';
 
@@ -130,16 +131,33 @@ export const auditManifestSchema = z.object({
   wallSeconds: z.number().int().min(1).max(600).default(120),
   maxElements: z.number().int().min(1).max(20000).default(3000),
   networkReplay: networkReplayDescriptorSchema.optional(),
+  // Opt-in, additive navigation policy (see src/audit/navigation.js). Omitted: the original single-origin rule.
+  followRedirects: z.boolean().optional()
+    .describe('true follows main-document redirects to allowedOrigins and same-host http->https upgrades (at most 5 hops). Omitted or false: redirects must stay on the same origin.'),
+  allowedOrigins: z.array(text.refine(isBareOrigin, 'allowedOrigins entries must be http(s) origins in the form scheme://host[:port], such as "https://www.example.com": no path (not even a trailing slash), query, fragment or credentials. Letter case, a default port and Unicode hostnames are normalized to the canonical origin.')).max(20).optional()
+    .describe('Extra exact origins the main document may navigate to, e.g. ["https://www.example.com"]. Only list origins you are authorized to audit.'),
 }).strict().superRefine((manifest, ctx) => {
   if (!safeHttpUrl(manifest.url)) return;
   const base = new URL(manifest.url);
+  // The origins a navigate action may target: the manifest origin, allowedOrigins and, with followRedirects,
+  // the same-host https upgrade of any of those http origins (the only other origin a start can land on).
+  // Runtime still checks each navigate against the origins actually in force for the session.
+  const declared = [base.origin, ...(manifest.allowedOrigins ?? []).map(origin => canonicalOrigin(origin) ?? origin)];
+  const origins = new Set([...declared, ...(manifest.followRedirects ? declared.map(httpsUpgradeOrigin).filter(Boolean) : [])]);
+  // A manifest without the new fields keeps the 0.1.1 issue message word for word.
+  const legacy = manifest.followRedirects === undefined && manifest.allowedOrigins === undefined;
+  if (manifest.networkReplay && (manifest.followRedirects || manifest.allowedOrigins?.length)) {
+    ctx.addIssue({ code: 'custom', path: ['networkReplay'], message: 'networkReplay cannot be combined with followRedirects or allowedOrigins.' });
+  }
   for (const [index, action] of (manifest.actions ?? []).entries()) {
     if (action.action !== 'navigate') continue;
     try {
       const target = new URL(action.path, base);
-      if (!safeHttpUrl(target.href) || target.origin !== base.origin) throw new Error();
+      if (!safeHttpUrl(target.href) || !origins.has(target.origin)) throw new Error();
     } catch {
-      ctx.addIssue({ code: 'custom', path: ['actions', index, 'path'], message: 'Navigation must remain on the manifest HTTP(S) origin without credentials.' });
+      ctx.addIssue({ code: 'custom', path: ['actions', index, 'path'], message: legacy
+        ? 'Navigation must remain on the manifest HTTP(S) origin without credentials.'
+        : 'Navigation must remain on the manifest HTTP(S) origin or an allowedOrigins entry (or, with followRedirects, its same-host https upgrade), without credentials.' });
     }
   }
 });

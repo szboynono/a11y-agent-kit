@@ -127,6 +127,8 @@ export function errorRecord(error, stage) {
   };
   if (stage) record.stage = stage;
   if (error.details !== undefined) record.details = error.details;
+  // Additive structured payload for a blocked main-document navigation (src/audit/navigation.js).
+  if (error.navigation !== undefined) record.navigation = error.navigation;
   return record;
 }
 

@@ -628,6 +628,7 @@ function common(audit) {
     standard: audit.standard,
     codeFingerprint: audit.codeFingerprint,
     sourceStability: audit.sourceStability,
+    ...(audit.navigation ? { navigation: audit.navigation } : {}),
     sourceAudit,
     collection: { reportPath: audit.reportPath, reportDigest: audit.reportDigest },
     candidates: audit.candidates,

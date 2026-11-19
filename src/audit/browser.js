@@ -7,6 +7,7 @@ import { digest, errorRecord, ToolError } from '../evidence.js';
 import { decodePng, pixelAt, relativeLuminance, contrastRatio, pngDimensions } from './pixels.js';
 import { auditAxeTags } from './schema.js';
 import { loadNetworkReplay } from './network-replay.js';
+import { clipUrl, decideNavigation, navigationBlockDetails, navigationPolicy, redactUrl, withNavigation } from './navigation.js';
 import { buildElementRows, compactAxNode, INTERACTIVE_RULE, INSPECT_MANY_PRESET_LIMIT } from './inspect-many.js';
 import { collectNonTextFacts, analyzeNonText, NONTEXT_SCOPE } from './nontext.js';
 
@@ -423,10 +424,14 @@ function axeTargets(axe) {
   return { rows, totalTargets, omittedTargets: Math.max(0, totalTargets - rows.length), rowLimit: axeBindingRowLimit };
 }
 
-function safeNavigation(raw, origin) {
-  try { const url = new URL(raw); return ['http:', 'https:'].includes(url.protocol) && url.origin === origin && !url.username && !url.password; }
-  catch { return false; }
-}
+const CHAIN_HISTORY = 64;
+// Insertion-ordered maps: drop the oldest entries so a long session stays bounded without breaking a live chain.
+const remember = (map, key, value, limit = CHAIN_HISTORY * 4) => {
+  map.set(key, value);
+  while (map.size > limit) map.delete(map.keys().next().value);
+};
+const hopView = hop => ({ url: clipUrl(hop.url), status: hop.status ?? null, ...(hop.blocked ? { blocked: true } : {}) });
+const httpUrl = raw => { try { const url = new URL(raw); return ['http:', 'https:'].includes(url.protocol) ? url : null; } catch { return null; } };
 
 function contrastSample(image, point) {
   const rgba = pixelAt(image, point.x, point.y);
@@ -505,11 +510,23 @@ async function openKeydownProbe(page) {
 }
 
 export class AuditBrowser {
-  constructor(manifest, { handleSignals = true } = {}) {
+  /** `launchArgs` is an in-process option for tests (e.g. host resolver rules); manifests cannot set it. */
+  constructor(manifest, { handleSignals = true, launchArgs } = {}) {
     this.manifest = manifest;
     this.axeTags = Object.freeze(auditAxeTags(manifest.standard));
     this.handleSignals = handleSignals;
+    this.launchArgs = launchArgs;
     this.origin = new URL(manifest.url).origin;
+    // Main-document navigation state. Without allowedOrigins/followRedirects this is the original single-origin rule.
+    this.navigationPolicy = navigationPolicy(manifest);
+    this.sessionOrigins = new Set([this.origin, ...this.navigationPolicy.allowedOrigins]);
+    this.baseUrl = manifest.url; this.pinnedToLanding = false; this.startUrl = null;
+    // Blocks are counted, not kept in a capped list, so the newest block is always reachable however long the session.
+    this.navigationStage = 'audit-browser-start'; this.navigationBlockCount = 0; this.lastNavigationBlock = null;
+    // Structured payload per legacy `blocked` event; the event objects keep their 0.1.1 shape {reason, url}.
+    this.blockedNavigation = new WeakMap();
+    this.chainByInterception = new Map(); this.pendingRedirectStatus = new Map(); this.navigationChains = []; this.chainSeq = 0;
+    this.initialChain = null; this.initialBlock = null;
     this.storeKey = `__a11yAudit_${randomUUID().replaceAll('-', '')}`;
     this.keyboardOnly = true; this.inputPath = 'keyboard-only'; this.keyboardPath = [];
     this.spacingEnabled = false; this.blocked = []; this.pageErrors = []; this.browser = null; this.context = null; this.page = null;
@@ -519,7 +536,7 @@ export class AuditBrowser {
 
   async start() {
     if (this.manifest.networkReplay) this.networkReplay = await loadNetworkReplay({ projectRoot: this.manifest.projectRoot, origin: this.origin, descriptor: this.manifest.networkReplay, onMainNavigationBlocked: event => this.blocked.push(event) });
-    this.browser = await chromium.launch({ headless: true, handleSIGINT: this.handleSignals, handleSIGTERM: this.handleSignals });
+    this.browser = await chromium.launch({ headless: true, handleSIGINT: this.handleSignals, handleSIGTERM: this.handleSignals, ...(this.launchArgs ? { args: [...this.launchArgs] } : {}) });
     if (this.closed) { await this.browser.close(); throw new ToolError('AUDIT_BROWSER_CLOSED', 'The browser session was cancelled while launching.'); }
     this.context = await this.browser.newContext({ viewport: this.manifest.viewport, serviceWorkers: 'block', acceptDownloads: false });
     if (this.closed) { await this.context.close(); await this.browser.close(); throw new ToolError('AUDIT_BROWSER_CLOSED', 'The browser session was cancelled while creating a context.'); }
@@ -539,25 +556,124 @@ export class AuditBrowser {
       // requests through CDP so every main-frame hop is checked before sending.
       const navigation = await this.context.newCDPSession(this.page);
       const { frameTree } = await navigation.send('Page.getFrameTree');
+      const mainFrame = frameTree.frame.id;
+      // Network events only annotate the recorded hop chain with HTTP statuses; Fetch decides every hop.
+      navigation.on('Network.requestWillBeSent', event => { if (event.frameId === mainFrame) this.recordRedirectResponse(event); });
+      navigation.on('Network.responseReceived', event => { if (event.frameId === mainFrame) this.recordFinalResponse(event); });
       navigation.on('Fetch.requestPaused', event => {
-        const outside = event.frameId === frameTree.frame.id && !safeNavigation(event.request.url, this.origin);
-        if (outside) this.blocked.push({ reason: 'navigation_outside_origin', url: event.request.url });
-        void navigation.send(outside ? 'Fetch.failRequest' : 'Fetch.continueRequest', outside
-          ? { requestId: event.requestId, errorReason: 'BlockedByClient' }
-          : { requestId: event.requestId }).catch(() => {});
+        const decision = event.frameId === mainFrame ? this.decideMainFrameRequest(event) : { allowed: true };
+        void navigation.send(decision.allowed ? 'Fetch.continueRequest' : 'Fetch.failRequest', decision.allowed
+          ? { requestId: event.requestId }
+          : { requestId: event.requestId, errorReason: 'BlockedByClient' }).catch(() => {});
       });
+      // Events only: this session never reads bodies, so it retains none.
+      await navigation.send('Network.enable', { maxTotalBufferSize: 0, maxResourceBufferSize: 0 });
       await navigation.send('Fetch.enable', { patterns: [{ resourceType: 'Document', requestStage: 'Request' }] });
     }
-    await this.goto(this.manifest.url, 15000);
+    try { await this.goto(this.manifest.url, 15000); }
+    finally { this.navigationStage = 'between-actions'; }
+    // Landing: when the start URL was redirected to another (allowed) origin, later navigate/reset
+    // resolve against the landed URL, so they never re-enter the old origin's redirect. Only an http(s)
+    // page on the origin of the last followed start hop is pinned; anything else (a script moving to
+    // about:blank, a replayed start) keeps the 0.1.1 behavior of resolving against manifest.url.
+    this.startUrl = this.page.url();
+    const landed = httpUrl(this.startUrl), lastHop = this.initialChain?.hops.at(-1);
+    const followed = lastHop && !lastHop.blocked ? httpUrl(lastHop.url) : null;
+    if (landed && followed && landed.origin === followed.origin && landed.origin !== this.origin) {
+      this.sessionOrigins.add(landed.origin); this.baseUrl = this.startUrl; this.pinnedToLanding = true;
+    }
     await this.settle();
     this.networkReplay?.setPhase('between_actions');
     return { browser: this.browser.version() };
   }
 
+  /** Instances built without the constructor (test doubles) fall back to the manifest-only state. */
+  ensureNavigationState() {
+    this.navigationPolicy ??= navigationPolicy(this.manifest);
+    this.sessionOrigins ??= new Set([this.navigationPolicy.manifestOrigin, ...this.navigationPolicy.allowedOrigins]);
+    this.baseUrl ??= this.manifest.url;
+    this.navigationBlockCount ??= 0;
+    this.blockedNavigation ??= new WeakMap();
+  }
+
+  /** The chain whose network request id matches, newest first. */
+  chainForNetworkId(networkId) {
+    return (this.navigationChains ?? []).findLast(item => item.networkId === networkId);
+  }
+
+  /**
+   * `Network.requestWillBeSent` with a redirectResponse carries the status of the hop that redirected. CDP
+   * does not order it against `Fetch.requestPaused` for the next hop, so the k-th redirect response of a
+   * request is applied to hop k-1 whenever it arrives; a status that arrives before its chain exists waits.
+   */
+  recordRedirectResponse(event) {
+    if (event.type !== 'Document' || !event.redirectResponse) return;
+    const chain = this.chainForNetworkId(event.requestId);
+    if (!chain) {
+      const pending = this.pendingRedirectStatus.get(event.requestId) ?? [];
+      remember(this.pendingRedirectStatus, event.requestId, [...pending, event.redirectResponse.status]);
+      return;
+    }
+    this.applyRedirectStatus(chain, chain.redirectResponses = (chain.redirectResponses ?? 0) + 1, event.redirectResponse.status);
+  }
+
+  applyRedirectStatus(chain, index, status) {
+    const hop = chain.hops[index - 1];
+    if (hop) { if (hop.status === null) hop.status = status; }
+    else (chain.pendingStatuses ??= new Map()).set(index - 1, status);
+  }
+
+  recordFinalResponse(event) {
+    if (event.type !== 'Document') return;
+    const last = this.chainForNetworkId(event.requestId)?.hops.at(-1);
+    if (last && !last.blocked && last.url === event.response.url) last.status = event.response.status;
+  }
+
+  /** Policy decision for one paused main-frame Document request; records the hop chain and any block. */
+  decideMainFrameRequest(event) {
+    const url = event.request.url;
+    const parent = event.redirectedRequestId ? this.chainByInterception.get(event.redirectedRequestId) : undefined;
+    const chain = parent ?? { seq: ++this.chainSeq, networkId: event.networkId, stage: this.navigationStage, hops: [] };
+    if (!parent) {
+      this.navigationChains.push(chain);
+      if (this.navigationChains.length > CHAIN_HISTORY) this.navigationChains.shift();
+      if (this.navigationStage === 'audit-browser-start' && !this.initialChain) this.initialChain = chain;
+      const pending = this.pendingRedirectStatus.get(event.networkId);
+      if (pending) { this.pendingRedirectStatus.delete(event.networkId); chain.redirectResponses = pending.length; pending.forEach((status, index) => (chain.pendingStatuses ??= new Map()).set(index, status)); }
+    }
+    remember(this.chainByInterception, event.requestId, chain);
+    const previous = chain.hops.at(-1) ?? null;
+    const decision = decideNavigation({ url, previousUrl: previous?.url ?? null, redirects: chain.hops.length, policy: this.navigationPolicy, sessionOrigins: this.sessionOrigins });
+    const hop = { url, status: chain.pendingStatuses?.get(chain.hops.length) ?? null };
+    chain.pendingStatuses?.delete(chain.hops.length);
+    chain.hops.push(hop);
+    if (!decision.allowed) {
+      hop.blocked = true; chain.blocked = true;
+      let current = null;
+      try { current = this.page.url(); } catch { /* The page may be closing. */ }
+      const details = navigationBlockDetails({ ...decision, fromUrl: previous?.url ?? current, blockedUrl: url, chain: chain.hops.map(hopView),
+        policy: this.navigationPolicy, sessionOrigins: this.sessionOrigins, stage: chain.stage, initial: chain.stage === 'audit-browser-start' });
+      this.navigationBlockCount++; this.lastNavigationBlock = details;
+      if (chain.stage === 'audit-browser-start' && !this.initialBlock) this.initialBlock = details;
+      // The 0.1.1 event shape {reason, url} is kept; the structured payload rides alongside as `navigation`.
+      const legacy = { reason: 'navigation_outside_origin', url: redactUrl(url) };
+      this.blockedNavigation.set(legacy, details);
+      this.blocked.push(legacy);
+    }
+    return decision;
+  }
+
   async goto(url, timeout) {
     const previous = new URL(this.page.url());
     const target = new URL(url);
-    const response = await this.page.goto(target.href, { waitUntil: 'domcontentloaded', timeout });
+    const blocksBefore = this.navigationBlockCount ?? 0;
+    let response;
+    try { response = await this.page.goto(target.href, { waitUntil: 'domcontentloaded', timeout }); }
+    catch (error) {
+      // The 0.1.1 error (code, message) is rethrown unchanged; a policy block adds `navigation`.
+      if ((this.navigationBlockCount ?? 0) > blocksBefore) withNavigation(error, this.lastNavigationBlock);
+      throw error;
+    }
     previous.hash = ''; target.hash = '';
     if (response ? !response.ok() : previous.href !== target.href) {
       throw new ToolError('HTTP_ERROR', `Audit navigation returned HTTP ${response?.status() ?? 'no response'}.`);
@@ -741,10 +857,14 @@ export class AuditBrowser {
     if (action.action === 'wait_for') result = { condition: action.condition, selector: action.selector,
       timeoutMs: action.timeoutMs ?? 3000, effectiveTimeoutMs: 0, matched: false };
     const blockedBefore = this.blocked.length;
-    const navigationBefore = this.navigationResponses.length;
+    const navigationBefore = this.navigationResponses.length, chainBefore = this.chainSeq ?? 0;
+    this.navigationStage = action.action;
     const captureNavigation = () => {
       const responses = this.navigationResponses.slice(navigationBefore);
       if (responses.length) result = { ...result, navigationResponses: responses };
+      // Only redirected or blocked main-document navigations add a chain; plain loads keep the original record shape.
+      const chains = (this.navigationChains ?? []).filter(chain => chain.seq > chainBefore && (chain.hops.length > 1 || chain.blocked));
+      if (chains.length) result = { ...result, redirectChains: chains.map(chain => ({ hops: chain.hops.map(hopView), ...(chain.blocked ? { blocked: true } : {}) })) };
       return responses;
     };
     const replayDelta = () => {
@@ -893,8 +1013,14 @@ export class AuditBrowser {
           result = { target: element, filled: true, keyboardOnly: false, inputPath: this.inputPath }; break;
         }
         case 'navigate': {
-          const target = new URL(action.path, this.manifest.url);
-          if (!safeNavigation(target.href, this.origin)) throw new ToolError('UNSAFE_AUDIT_NAVIGATION', 'Navigation must remain on the manifest HTTP(S) origin without credentials.');
+          // Relative paths resolve against the landed start URL when the start redirected to another origin.
+          this.ensureNavigationState();
+          const target = new URL(action.path, this.baseUrl);
+          const decision = decideNavigation({ url: target.href, policy: this.navigationPolicy, sessionOrigins: this.sessionOrigins });
+          if (!decision.allowed) {
+            throw withNavigation(new ToolError('UNSAFE_AUDIT_NAVIGATION', 'Navigation must remain on the manifest HTTP(S) origin without credentials.'), navigationBlockDetails({ ...decision, fromUrl: this.page.url(),
+              blockedUrl: target.href, chain: [{ url: target.href, status: null, blocked: true }], policy: this.navigationPolicy, sessionOrigins: this.sessionOrigins, stage: 'navigate' }));
+          }
           await this.goto(target.href, Math.min(timeoutMs, 15000));
           await this.settle(); result = { url: this.page.url() }; break;
         }
@@ -931,7 +1057,8 @@ export class AuditBrowser {
           await this.page.setViewportSize(this.manifest.viewport);
           // A fragment-only goto can retain the document, styles and focus.
           await this.page.goto('about:blank', { waitUntil: 'domcontentloaded', timeout: Math.min(timeoutMs, 15000) });
-          await this.goto(this.manifest.url, Math.min(timeoutMs, 15000));
+          this.ensureNavigationState();
+          await this.goto(this.baseUrl, Math.min(timeoutMs, 15000));
           await this.settle(); result = { reset: true, keyboardOnly: true, inputPath: this.inputPath, focusOrigin: 'new-document-initial-focus' }; break;
         default: throw new ToolError('UNSUPPORTED_AUDIT_ACTION', `Unsupported audit action: ${action.action}`);
       }
@@ -964,7 +1091,10 @@ export class AuditBrowser {
       }
       if (action.action === 'spacing') result = { ...after.spacing, stylePresent: after.spacing.enabled, enabled: action.enabled, requestedCss: SPACING_CSS, requested: { ...SPACING_REQUEST }, nodes: this.lastObservation.raw.nodes };
       if (['snapshot', 'inspect', 'inspect_many'].includes(action.action) && before.stateId !== after.stateId) throw new ToolError('DOM_STATE_CHANGED', 'The rendered state changed while capturing the DOM and native ARIA snapshot; collect again after it settles.');
-      if (this.blocked.length > blockedBefore) throw new ToolError('AUDIT_BROWSER_ACTION_BLOCKED', 'The action attempted an unsupported popup, download or navigation outside the allowed origin.', this.blocked.slice(blockedBefore));
+      if (this.blocked.length > blockedBefore) {
+        const events = this.blocked.slice(blockedBefore), block = events.map(event => this.blockedNavigation?.get(event)).findLast(Boolean);
+        throw withNavigation(new ToolError('AUDIT_BROWSER_ACTION_BLOCKED', 'The action attempted an unsupported popup, download or navigation outside the allowed origin.', events), block);
+      }
       const failedNavigation = captureNavigation().filter(response => response.status >= 400);
       if (failedNavigation.length) throw new ToolError('HTTP_ERROR', 'An action navigated the main document to an HTTP error response.', failedNavigation);
       if (blobCapture) {
@@ -982,7 +1112,7 @@ export class AuditBrowser {
         ? { code: error.code || 'AUDIT_FILL_ERROR', stage: 'fill', message: 'The fill action failed; the supplied input value is omitted.' }
         : errorRecord(error, action.action);
       return { success: false, before, after, result, error: detail, ...replayDelta(), ...(png ? { pngBytes: png } : {}) };
-    } finally { this.statusSnapshot = false; if (statusCapture) await statusCapture.close(); if (blobCapture) await blobCapture.close(); }
+    } finally { this.statusSnapshot = false; this.navigationStage = 'between-actions'; if (statusCapture) await statusCapture.close(); if (blobCapture) await blobCapture.close(); }
   }
 
   async close() {
@@ -994,12 +1124,33 @@ export class AuditBrowser {
 
   async closeResources() {
     this.networkReplay?.setPhase('cleanup');
-    const errors = [...this.pageErrors, ...this.blocked.map(event => ({ code: 'AUDIT_UNSUPPORTED_EVENT', message: `The site attempted an unsupported browser event: ${event.reason}.`, details: event }))];
+    const errors = [...this.pageErrors, ...this.blocked.map(event => {
+      const navigation = this.blockedNavigation?.get(event);
+      return { code: 'AUDIT_UNSUPPORTED_EVENT', message: `The site attempted an unsupported browser event: ${event.reason}.`, details: event, ...(navigation ? { navigation } : {}) };
+    })];
     if (this.context) await this.context.close().catch(error => errors.push(errorRecord(error, 'audit-context-close')));
     if (this.browser) await this.browser.close().catch(error => errors.push(errorRecord(error, 'audit-browser-close')));
     if (this.networkReplay) { await this.networkReplay.drain(); this.networkReplay.setPhase('closed'); }
     errors.push(...this.navigationResponses.filter(response => response.status >= 400).map(response => ({ code: 'HTTP_ERROR', stage: 'audit-main-document-navigation', message: `A main-document navigation returned HTTP ${response.status}.`, details: response })));
     return errors;
+  }
+
+  /** Additive report field: declared URL, recorded start chain, landed URL and the policy in force. */
+  navigationReport() {
+    const hops = this.initialChain?.hops.map(hopView) ?? [];
+    const last = hops.at(-1);
+    // The landed URL comes from page.url(); it is redacted and clipped like every other recorded URL.
+    const landed = this.startUrl ?? (last && !last.blocked ? this.initialChain.hops.at(-1).url : null);
+    const finalUrl = landed == null ? null : clipUrl(landed);
+    return {
+      version: this.navigationPolicy.version, manifestUrl: this.manifest.url, finalUrl,
+      redirectChain: hops, redirects: Math.max(0, hops.length - 1),
+      landingOrigin: finalUrl ? clipUrl(new URL(landed).origin) : null, pinnedToLanding: this.pinnedToLanding,
+      sessionOrigins: [...this.sessionOrigins],
+      policy: { followRedirects: this.navigationPolicy.followRedirects, allowedOrigins: [...this.navigationPolicy.allowedOrigins], maxRedirects: this.navigationPolicy.maxRedirects },
+      ...(this.initialBlock ? { blocked: this.initialBlock } : {}),
+      ...(this.networkReplay || this.manifest.networkReplay ? { chainSource: 'not-recorded-under-network-replay' } : {}),
+    };
   }
 
   networkReplayReport() {

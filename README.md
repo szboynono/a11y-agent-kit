@@ -1,6 +1,6 @@
 # a11y-agent-kit
 
-Install from the extracted source directory. See [source verification and test scope](docs/publication-boundary.md).
+Install from the extracted source directory. See [source verification and test scope](https://github.com/szboynono/a11y-agent-kit/blob/v0.1.1/docs/publication-boundary.md).
 
 Bring your own agent. Run accessibility audits locally with your existing model and provider. Give your agent a running website and project folder: it explores with Playwright, runs axe, retains browser evidence, and produces an HTML report with findings and unfinished checks. The default workflow audits without editing application source.
 
@@ -27,6 +27,31 @@ An agent with axe can also explore a site. This kit supplies the surrounding wor
 ## Install
 
 Use a local copy of this source tree with Node.js 22.12 or later, npm and matching Playwright Chromium. The preferred executable is `a11y-agent-kit`; `a11y-fix-loop` remains a compatibility alias.
+
+### Install from npm
+
+Once version 0.1.1 is available on npm, use Node.js 22.12 or later and install the matching Playwright Chromium before running your first audit.
+
+```sh
+npx playwright@1.64.1 install chromium
+```
+
+Use `npx a11y-agent-kit <command>` with the CLI command and its arguments. For example, run `npx a11y-agent-kit audit ./audit-manifest.json` with your audit manifest. For a global installation, run `npm i -g a11y-agent-kit`, then use `a11y-agent-kit` with the same arguments.
+
+For a stdio MCP host that accepts an `mcpServers` configuration, use the following entry after installing Chromium.
+
+```json
+{
+  "mcpServers": {
+    "a11y-agent-kit": {
+      "command": "npx",
+      "args": ["-y", "a11y-agent-kit", "serve"]
+    }
+  }
+}
+```
+
+### Install from source
 
 ### Copy this to your agent
 
@@ -90,7 +115,7 @@ Set up and use the local a11y-agent-kit source tree to audit my application.
 | Matching Playwright Chromium | Separate browser download; regular Chrome is not a substitute. |
 | Browser system libraries | Some Linux environments require additional libraries installed with approved elevation. |
 
-`npm ci` installs the libraries together, plus development dependency `@modelcontextprotocol/client` for protocol checks. [package.json](package.json) declares dependencies; [package-lock.json](package-lock.json) pins versions and transitive dependencies in this source tree.
+`npm ci` installs the libraries together, plus development dependency `@modelcontextprotocol/client` for protocol checks. [package.json](package.json) declares dependencies; [package-lock.json](https://github.com/szboynono/a11y-agent-kit/blob/v0.1.1/package-lock.json) pins versions and transitive dependencies in this source tree.
 
 ### Manual install for humans
 
@@ -152,7 +177,7 @@ A skill is your agent's playbook; the CLI executes actions, and MCP is an option
 | [a11y-audit](skills/a11y-audit/SKILL.md) | Recommended for new audits: collect evidence, checkpoint, submit for separate review and deliver reports. No source repair. |
 | [a11y-fix-loop](skills/a11y-fix-loop/SKILL.md) | Historical, limited repair: agent-led `analyze`, source edits, `verify`, `check` against frozen states/assertions. Covers only `button-name`, `label`, `aria-valid-attr` (partial SC 4.1.2 evidence), not general automatic remediation. |
 
-If the Claude plugin is already loaded, [its audit command](commands/a11y-audit.md) is `/a11y-agent-kit:a11y-audit <url>` and uses the audit skill/MCP. The plugin entry is included for local use from the source tree.
+If the Claude plugin is already loaded, [its audit command](https://github.com/szboynono/a11y-agent-kit/blob/v0.1.1/commands/a11y-audit.md) is `/a11y-agent-kit:a11y-audit <url>` and uses the audit skill/MCP. The plugin entry is included for local use from the source tree.
 
 ## What you get
 
@@ -192,7 +217,7 @@ PNGs do not establish timing or persistent focus visibility. Ordinary screenshot
 - [Evidence requirements](skills/a11y-audit/references/evidence-policy-v2.md)
 - [MCP image delivery](docs/mcp-images.md)
 
-See [lifecycle and state machines](docs/state-machines.md) and [reproduction and scope](docs/publication-boundary.md) for source-checkout details.
+See [lifecycle and state machines](https://github.com/szboynono/a11y-agent-kit/blob/v0.1.1/docs/state-machines.md) and [reproduction and scope](https://github.com/szboynono/a11y-agent-kit/blob/v0.1.1/docs/publication-boundary.md) for source-checkout details.
 
 ## License
 

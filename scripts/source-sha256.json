@@ -18,13 +18,13 @@
     },
     {
       "path": "README.md",
-      "bytes": 13616,
-      "sha256": "683cdd5cb2a922f4697ba725547237ddea70e66831bdcec08b46db6e2d5f143c"
+      "bytes": 14674,
+      "sha256": "004e6991efad8e896a40e227584a90d0e7532858814bbb2df7accd32df6e45de"
     },
     {
       "path": "THIRD_PARTY_NOTICES.md",
-      "bytes": 6525,
-      "sha256": "7cc12580ecc8587a3d0151a52f7f7193e15afc9fa31e70ce2e50d3e36a5ad08a"
+      "bytes": 6581,
+      "sha256": "ccde014c92f33aabdc8044d16c775049efe67d93f226884284a6a69e10977cc3"
     },
     {
       "path": "commands/a11y-audit.md",
@@ -93,8 +93,8 @@
     },
     {
       "path": "examples/byoa-audit.md",
-      "bytes": 14991,
-      "sha256": "0b565756f85f88adbd7f223bb277e9334e6d1f4ee9f0656f2e8279498355ac81"
+      "bytes": 15044,
+      "sha256": "bfd4d015c3936cb601f7be4a09ed583193a0bdb8bd463df3554fe4d0c47ebf39"
     },
     {
       "path": "examples/codex-cli.md",
@@ -108,8 +108,8 @@
     },
     {
       "path": "examples/first-use.md",
-      "bytes": 5054,
-      "sha256": "7d6b78893dac9bb3013b913a253370ece19a5d6e1568051b201d7ebce736b4aa"
+      "bytes": 5107,
+      "sha256": "a717e955fa69fe68ad9c9037699a92e58f1cff997e16a87dcdcb0fd35727539d"
     },
     {
       "path": "examples/manifest.json",
@@ -124,12 +124,12 @@
     {
       "path": "package-lock.json",
       "bytes": 8324,
-      "sha256": "21f92760c784a97825f3f580c96021e083d1e62a51990f8f2c146b1338f209d9"
+      "sha256": "4dda00f58ff10fb1e02e459f682f4dc67545a01b4e19b03e0b57bf873111165e"
     },
     {
       "path": "package.json",
-      "bytes": 1113,
-      "sha256": "b2062275a41f8da88116e11e2d0e26ee7f830be4695d8392c53869a2d5ca64bb"
+      "bytes": 1369,
+      "sha256": "38e02a7f40f82321978bd8d752f2f9785db8dc966c08e313bd6b23fd97aa46fd"
     },
     {
       "path": "scripts/quickstart.mjs",
@@ -329,7 +329,7 @@
     {
       "path": "src/server.js",
       "bytes": 2760,
-      "sha256": "d526fe10e3465cd0a29363904edc73cc070e3ca781b9a731686d6644e7b0b068"
+      "sha256": "4a18cfef9d7aa18c2fe150a5520108d25033a535253e8303383a9a2529b85ec5"
     },
     {
       "path": "src/summary.js",

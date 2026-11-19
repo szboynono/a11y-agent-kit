@@ -41,7 +41,7 @@ Open the HTML locally. Its JSON source, original records and hashed PNGs stay un
 
 A submitted proposal remains `needs_review`. Use a different reviewer to inspect original evidence, applicability, exceptions and scope, then supply its decisions to `audit-review`; only supported claims enter `confirmedFindings`. Do not fabricate reviewer independence. Read command JSON on nonzero exits: needs-review, incomplete, expired and error are meaningful results. `audit-check:current` proves artifact integrity/source freshness within its contract, not semantic approval, URL-to-build attestation or conformance. No whole-site compliance or real screen-reader testing is established.
 
-Evidence paths are absolute and source-bound. Keep the original project/evidence tree in place; copying reports to another checkout or machine is not a supported replay/relocation flow. See the [source and test scope](../docs/publication-boundary.md).
+Evidence paths are absolute and source-bound. Keep the original project/evidence tree in place; copying reports to another checkout or machine is not a supported replay/relocation flow. See the [source and test scope](https://github.com/szboynono/a11y-agent-kit/blob/v0.1.1/docs/publication-boundary.md).
 
 With the installation prerequisites available, run `node scripts/quickstart.mjs` against its bundled loopback example. The fixture and review decision are synthetic and invoke no model.
 

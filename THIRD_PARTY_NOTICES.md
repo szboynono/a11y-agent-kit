@@ -4,7 +4,7 @@ The project's code is distributed under the [MIT license](LICENSE). This is a so
 
 ## Dependency metadata
 
-The [lockfile](package-lock.json) records dependency versions, integrity values and, where supplied, license identifiers.
+The [lockfile](https://github.com/szboynono/a11y-agent-kit/blob/v0.1.1/package-lock.json) records dependency versions, integrity values and, where supplied, license identifiers.
 
 - `axe-core` and `@axe-core/playwright` 4.14.0 are recorded as MPL-2.0.
 - `playwright` and `playwright-core` 1.64.1 are recorded as Apache-2.0.

@@ -153,5 +153,5 @@ checkpoint digests. The review decision is synthetic. The MCP smoke sends five
 request types (`step`, `read`, `view`, `checkpoint` and `submit`).
 `inventory` is outside this smoke. For `view`, the script checks that the
 returned local PNG file is nonempty. See
-[reproduction and scope](../docs/publication-boundary.md) for the static verifier
+[reproduction and scope](https://github.com/szboynono/a11y-agent-kit/blob/v0.1.1/docs/publication-boundary.md) for the static verifier
 and the limits of this exercise.

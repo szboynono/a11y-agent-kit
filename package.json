@@ -1,6 +1,6 @@
 {
   "name": "a11y-agent-kit",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Local accessibility audit tools for your own coding agent: browser exploration, configurable WCAG 2.1/2.2 A/AA evidence (default 2.2 AA) and independently reviewed findings.",
   "main": "./src/index.js",
   "exports": {
@@ -42,5 +42,13 @@
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "2.4.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/szboynono/a11y-agent-kit.git"
+  },
+  "homepage": "https://github.com/szboynono/a11y-agent-kit#readme",
+  "bugs": {
+    "url": "https://github.com/szboynono/a11y-agent-kit/issues"
   }
 }

@@ -60,6 +60,10 @@ async function apexWwwSite(t, { wwwStatus = 200 } = {}) {
   });
 }
 
+// Public sessions resolve DNS names before each main-frame request. These fixtures map public-site.example to
+// loopback inside Chromium, so the DNS check is given a fixed public answer instead of the system resolver.
+const publicAnswer = { name: 'test-public', lookup: async () => [{ address: '8.8.8.8', family: 4 }] };
+
 async function startBlocked(manifest, options) {
   const browser = new AuditBrowser(parseAuditManifest(manifest), options);
   try { await browser.start(); } catch (error) { return { browser, error }; } finally { await browser.close(); }
@@ -301,7 +305,7 @@ test('T9: a public-looking site cannot redirect into loopback even when declared
   const fixture = await site(t, () => ({ location: `${loopback}/` }));
   const publicUrl = `http://public-site.example:${fixture.port}/`;
   const { error } = await startBlocked({ projectRoot: '/tmp', url: publicUrl, followRedirects: true, allowedOrigins: [loopback] },
-    { launchArgs: ['--host-resolver-rules=MAP public-site.example 127.0.0.1'] });
+    { launchArgs: ['--host-resolver-rules=MAP public-site.example 127.0.0.1'], hostResolver: publicAnswer });
   assert.equal(fixture.hits.length, 1, 'the public-looking host was reached through the resolver rule');
   assert.equal(error.navigation.reason, 'private_network_target'); assert.equal(error.navigation.overridable, false);
   assert.equal(target.hits.length, 0, 'the loopback target was never contacted');
@@ -337,7 +341,7 @@ test('m6: mid-session click and navigate from a public-looking site to a private
     : { body: page('public').replace('</main>', `<a id="private" href="${loopback}/">Private</a></main>`) });
   const publicOrigin = `http://public-site.example:${fixture.port}`;
   for (const extra of [{}, { followRedirects: true, allowedOrigins: [loopback] }]) {
-    const browser = new AuditBrowser(parseAuditManifest({ projectRoot: '/tmp', url: `${publicOrigin}/`, ...extra }), { launchArgs: ['--host-resolver-rules=MAP public-site.example 127.0.0.1'] });
+    const browser = new AuditBrowser(parseAuditManifest({ projectRoot: '/tmp', url: `${publicOrigin}/`, ...extra }), { launchArgs: ['--host-resolver-rules=MAP public-site.example 127.0.0.1'], hostResolver: publicAnswer });
     t.after(() => browser.close());
     await browser.start();
     const clicked = await browser.execute({ action: 'click', selector: '#private' });

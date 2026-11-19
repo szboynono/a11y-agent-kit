@@ -7,7 +7,7 @@ import { digest, errorRecord, ToolError } from '../evidence.js';
 import { decodePng, pixelAt, relativeLuminance, contrastRatio, pngDimensions } from './pixels.js';
 import { auditAxeTags } from './schema.js';
 import { loadNetworkReplay } from './network-replay.js';
-import { clipUrl, decideNavigation, navigationBlockDetails, navigationPolicy, redactUrl, withNavigation } from './navigation.js';
+import { clipUrl, decideNavigation, navigationBlockDetails, navigationPolicy, redactUrl, resolutionHost, resolveNavigationTarget, systemHostResolver, withNavigation } from './navigation.js';
 import { buildElementRows, compactAxNode, INTERACTIVE_RULE, INSPECT_MANY_PRESET_LIMIT } from './inspect-many.js';
 import { collectNonTextFacts, analyzeNonText, NONTEXT_SCOPE } from './nontext.js';
 
@@ -510,9 +510,15 @@ async function openKeydownProbe(page) {
 }
 
 export class AuditBrowser {
-  /** `launchArgs` is an in-process option for tests (e.g. host resolver rules); manifests cannot set it. */
-  constructor(manifest, { handleSignals = true, launchArgs } = {}) {
+  /**
+   * `launchArgs` and `hostResolver` are in-process options for tests (e.g. host resolver rules, a fixed DNS answer);
+   * manifests cannot set them. `hostResolver` is `{ name, lookup(hostname) }` and defaults to the system resolver.
+   */
+  constructor(manifest, { handleSignals = true, launchArgs, hostResolver } = {}) {
     this.manifest = manifest;
+    this.hostResolver = hostResolver ?? systemHostResolver;
+    // Main-frame DNS checks still running; an action waits for those it started before reading its blocks.
+    this.pendingScreens = new Set();
     this.axeTags = Object.freeze(auditAxeTags(manifest.standard));
     this.handleSignals = handleSignals;
     this.launchArgs = launchArgs;
@@ -561,10 +567,11 @@ export class AuditBrowser {
       navigation.on('Network.requestWillBeSent', event => { if (event.frameId === mainFrame) this.recordRedirectResponse(event); });
       navigation.on('Network.responseReceived', event => { if (event.frameId === mainFrame) this.recordFinalResponse(event); });
       navigation.on('Fetch.requestPaused', event => {
-        const decision = event.frameId === mainFrame ? this.decideMainFrameRequest(event) : { allowed: true };
-        void navigation.send(decision.allowed ? 'Fetch.continueRequest' : 'Fetch.failRequest', decision.allowed
+        // The request stays paused until the decision, including any DNS check, is made; an unexpected failure blocks it.
+        const decided = event.frameId === mainFrame ? this.screenMainFrameRequest(event) : Promise.resolve({ allowed: true });
+        void decided.catch(() => ({ allowed: false })).then(decision => navigation.send(decision.allowed ? 'Fetch.continueRequest' : 'Fetch.failRequest', decision.allowed
           ? { requestId: event.requestId }
-          : { requestId: event.requestId, errorReason: 'BlockedByClient' }).catch(() => {});
+          : { requestId: event.requestId, errorReason: 'BlockedByClient' })).catch(() => {});
       });
       // Events only: this session never reads bodies, so it retains none.
       await navigation.send('Network.enable', { maxTotalBufferSize: 0, maxResourceBufferSize: 0 });
@@ -594,6 +601,8 @@ export class AuditBrowser {
     this.baseUrl ??= this.manifest.url;
     this.navigationBlockCount ??= 0;
     this.blockedNavigation ??= new WeakMap();
+    this.hostResolver ??= systemHostResolver;
+    this.pendingScreens ??= new Set();
   }
 
   /** The chain whose network request id matches, newest first. */
@@ -647,20 +656,42 @@ export class AuditBrowser {
     const hop = { url, status: chain.pendingStatuses?.get(chain.hops.length) ?? null };
     chain.pendingStatuses?.delete(chain.hops.length);
     chain.hops.push(hop);
-    if (!decision.allowed) {
-      hop.blocked = true; chain.blocked = true;
-      let current = null;
-      try { current = this.page.url(); } catch { /* The page may be closing. */ }
-      const details = navigationBlockDetails({ ...decision, fromUrl: previous?.url ?? current, blockedUrl: url, chain: chain.hops.map(hopView),
-        policy: this.navigationPolicy, sessionOrigins: this.sessionOrigins, stage: chain.stage, initial: chain.stage === 'audit-browser-start' });
-      this.navigationBlockCount++; this.lastNavigationBlock = details;
-      if (chain.stage === 'audit-browser-start' && !this.initialBlock) this.initialBlock = details;
-      // The 0.1.1 event shape {reason, url} is kept; the structured payload rides alongside as `navigation`.
-      const legacy = { reason: 'navigation_outside_origin', url: redactUrl(url) };
-      this.blockedNavigation.set(legacy, details);
-      this.blocked.push(legacy);
-    }
+    if (!decision.allowed) this.recordMainFrameBlock(chain, chain.hops.length - 1, decision);
     return decision;
+  }
+
+  /**
+   * `decideMainFrameRequest` plus, in a public session, a DNS check of the target host before the request is sent.
+   * Each hop (start, navigate, click-triggered navigation, every redirect) is checked; any non-public resolved
+   * address, or a failed lookup, blocks the hop with the same records as a literal private target.
+   */
+  async screenMainFrameRequest(event) {
+    const decision = this.decideMainFrameRequest(event);
+    if (!decision.allowed || !resolutionHost(event.request.url, this.navigationPolicy)) return decision;
+    const chain = this.chainByInterception.get(event.requestId), index = chain.hops.length - 1;
+    const pending = resolveNavigationTarget({ url: event.request.url, policy: this.navigationPolicy, resolver: this.hostResolver });
+    this.pendingScreens.add(pending);
+    try {
+      const screened = await pending;
+      if (!screened.allowed) this.recordMainFrameBlock(chain, index, screened);
+      return screened;
+    } finally { this.pendingScreens.delete(pending); }
+  }
+
+  /** Record a blocked main-frame hop: chain markers, structured details and the 0.1.1 legacy event. */
+  recordMainFrameBlock(chain, index, decision) {
+    const hop = chain.hops[index], previous = index > 0 ? chain.hops[index - 1] : null, url = hop.url;
+    hop.blocked = true; chain.blocked = true;
+    let current = null;
+    try { current = this.page.url(); } catch { /* The page may be closing. */ }
+    const details = navigationBlockDetails({ ...decision, fromUrl: previous?.url ?? current, blockedUrl: url, chain: chain.hops.slice(0, index + 1).map(hopView),
+      policy: this.navigationPolicy, sessionOrigins: this.sessionOrigins, stage: chain.stage, initial: chain.stage === 'audit-browser-start' });
+    this.navigationBlockCount++; this.lastNavigationBlock = details;
+    if (chain.stage === 'audit-browser-start' && !this.initialBlock) this.initialBlock = details;
+    // The 0.1.1 event shape {reason, url} is kept; the structured payload rides alongside as `navigation`.
+    const legacy = { reason: 'navigation_outside_origin', url: redactUrl(url) };
+    this.blockedNavigation.set(legacy, details);
+    this.blocked.push(legacy);
   }
 
   async goto(url, timeout) {
@@ -1016,7 +1047,9 @@ export class AuditBrowser {
           // Relative paths resolve against the landed start URL when the start redirected to another origin.
           this.ensureNavigationState();
           const target = new URL(action.path, this.baseUrl);
-          const decision = decideNavigation({ url: target.href, policy: this.navigationPolicy, sessionOrigins: this.sessionOrigins });
+          let decision = decideNavigation({ url: target.href, policy: this.navigationPolicy, sessionOrigins: this.sessionOrigins });
+          // A replayed session sends no network requests, so it resolves nothing; otherwise check the name before leaving.
+          if (decision.allowed && !this.networkReplay) decision = await resolveNavigationTarget({ url: target.href, policy: this.navigationPolicy, resolver: this.hostResolver });
           if (!decision.allowed) {
             throw withNavigation(new ToolError('UNSAFE_AUDIT_NAVIGATION', 'Navigation must remain on the manifest HTTP(S) origin without credentials.'), navigationBlockDetails({ ...decision, fromUrl: this.page.url(),
               blockedUrl: target.href, chain: [{ url: target.href, status: null, blocked: true }], policy: this.navigationPolicy, sessionOrigins: this.sessionOrigins, stage: 'navigate' }));
@@ -1091,6 +1124,8 @@ export class AuditBrowser {
       }
       if (action.action === 'spacing') result = { ...after.spacing, stylePresent: after.spacing.enabled, enabled: action.enabled, requestedCss: SPACING_CSS, requested: { ...SPACING_REQUEST }, nodes: this.lastObservation.raw.nodes };
       if (['snapshot', 'inspect', 'inspect_many'].includes(action.action) && before.stateId !== after.stateId) throw new ToolError('DOM_STATE_CHANGED', 'The rendered state changed while capturing the DOM and native ARIA snapshot; collect again after it settles.');
+      // A DNS check started by this action may still be running; its block belongs to this action.
+      if (this.pendingScreens?.size) await Promise.allSettled([...this.pendingScreens]);
       if (this.blocked.length > blockedBefore) {
         const events = this.blocked.slice(blockedBefore), block = events.map(event => this.blockedNavigation?.get(event)).findLast(Boolean);
         throw withNavigation(new ToolError('AUDIT_BROWSER_ACTION_BLOCKED', 'The action attempted an unsupported popup, download or navigation outside the allowed origin.', events), block);

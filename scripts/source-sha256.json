@@ -18,8 +18,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 10127,
-      "sha256": "c7ead304c3551bece5a260cee94a4a7cf07099e55f89b53df9ea643b2edd3c77"
+      "bytes": 10441,
+      "sha256": "b9e442ca5afcd060627221a01f10b8078a056fa570e3090fc61ba7f1d1929211"
     },
     {
       "path": "THIRD_PARTY_NOTICES.md",
@@ -48,8 +48,8 @@
     },
     {
       "path": "docs/state-machines.md",
-      "bytes": 27105,
-      "sha256": "15ca2607235d975b6cd5fcc4062b6f65d54c94b5f5e006419d3d81ba9aa260ea"
+      "bytes": 27249,
+      "sha256": "182213ec74e5c486e57dc807d9c5c626aebb83c499c3ead669a82ca59eed6632"
     },
     {
       "path": "docs/test-coverage.md",
@@ -98,8 +98,8 @@
     },
     {
       "path": "examples/byoa-audit.md",
-      "bytes": 18558,
-      "sha256": "a4a613a886baba3603d27ec8b2129331c05738010370719febfae598481c375e"
+      "bytes": 18661,
+      "sha256": "37588a1bd639ac0a883edc2cb297b73359a7d2a77fdfc758013514d5ac1b40e5"
     },
     {
       "path": "examples/codex-cli.md",
@@ -123,8 +123,8 @@
     },
     {
       "path": "examples/remote-site.md",
-      "bytes": 10720,
-      "sha256": "ae4ccfe354265185b7d12f80433560595c730074a61052438ffb22933108e934"
+      "bytes": 12789,
+      "sha256": "157c5f8df2a2507265314dbf3e029b926a453e27711cfae5a5b22229ba0cc147"
     },
     {
       "path": "llms.txt",
@@ -188,8 +188,8 @@
     },
     {
       "path": "src/audit/browser.js",
-      "bytes": 82836,
-      "sha256": "81c76e73efa0349aff8daf4f452174f250bd7c45d3ac8eabf338aa270ebd7d1c"
+      "bytes": 85365,
+      "sha256": "7d99c8b7add69a15ec0db590cfedabd2421e01ae5395293324be5ab95ad3c6a9"
     },
     {
       "path": "src/audit/checkpoint.js",
@@ -243,8 +243,8 @@
     },
     {
       "path": "src/audit/navigation.js",
-      "bytes": 11089,
-      "sha256": "ba208189b33c03de114043c80300578f7879ebe72495d1443d343e82924b0373"
+      "bytes": 19364,
+      "sha256": "38851cf2be3e8ccee43e2559fbd39054f0478a104c7e8a193c04e15ff8fd8884"
     },
     {
       "path": "src/audit/network-replay.js",
@@ -472,9 +472,14 @@
       "sha256": "f044dc6ff97f98bf8c295bc753395985267ddfd07c71d8b175e57faad2cd1fa7"
     },
     {
+      "path": "test/audit-navigation-dns.test.js",
+      "bytes": 23352,
+      "sha256": "89989fa5f3e87cd138aab0cb0c62aca836f8afcd9d0ef408a5a7b85c1907d0e8"
+    },
+    {
       "path": "test/audit-navigation.test.js",
-      "bytes": 59236,
-      "sha256": "7d4919717249e691900bd52bfb7a939f92fb587ebe75656ec50e1a4acca439ae"
+      "bytes": 59616,
+      "sha256": "2638e1c49291421a3bfc56a746137844fe77c414282ff9a03904570c92382d46"
     },
     {
       "path": "test/audit-network-replay.test.js",

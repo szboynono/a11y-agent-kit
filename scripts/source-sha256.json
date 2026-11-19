@@ -488,8 +488,8 @@
     },
     {
       "path": "test/audit-navigation.test.js",
-      "bytes": 59616,
-      "sha256": "2638e1c49291421a3bfc56a746137844fe77c414282ff9a03904570c92382d46"
+      "bytes": 60697,
+      "sha256": "44dbc83d83bbb1f569a1c82bd413c399249f85894eb4891a612809712267615a"
     },
     {
       "path": "test/audit-network-replay.test.js",

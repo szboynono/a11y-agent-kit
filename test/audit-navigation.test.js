@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
 import http from 'node:http';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -31,6 +32,32 @@ async function workspace(t) {
   return directory;
 }
 
+/**
+ * Chromium resolves every `*.localhost` name to [::1] first and 127.0.0.1 second. macOS lets any other socket bind
+ * [::1]:P while a fixture holds only 127.0.0.1:P, and a stray listener there takes Chromium's first connection (seen as
+ * ERR_CONNECTION_RESET on the start page). The fixture therefore holds both loopback addresses on one port: every
+ * `*.localhost` connection reaches it, and a later bind of [::1]:P elsewhere fails instead. A host without IPv6 loopback
+ * has nothing at [::1] to intercept, so only that case serves 127.0.0.1 alone.
+ */
+async function listenLoopback(t, server) {
+  const listen = (listener, port, host) => new Promise((resolve, reject) => {
+    listener.once('error', reject);
+    listener.listen(port, host, () => { listener.off('error', reject); resolve(); });
+  });
+  await listen(server, 0, '127.0.0.1');
+  const { port } = server.address();
+  const ipv6 = net.createServer(socket => server.emit('connection', socket));
+  const held = await listen(ipv6, port, '::1').then(() => true, error => {
+    if (error.code === 'EADDRNOTAVAIL' || error.code === 'EAFNOSUPPORT') return false;
+    server.close(); throw error;
+  });
+  t.after(async () => {
+    server.closeAllConnections();
+    await Promise.all([new Promise(resolve => server.close(resolve)), held && new Promise(resolve => ipv6.close(resolve))]);
+  });
+  return port;
+}
+
 /** One loopback server; `route(host, url, port)` returns { location, status } or { body, status }. Hits are counted per host. */
 async function site(t, route) {
   const hits = [];
@@ -42,9 +69,7 @@ async function site(t, route) {
     if (answer.location) response.writeHead(answer.status ?? 302, { location: answer.location }).end();
     else response.writeHead(answer.status ?? 200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }).end(answer.body ?? page(`${host}${request.url}`));
   });
-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  t.after(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); });
-  const port = server.address().port;
+  const port = await listenLoopback(t, server);
   return { port, hits, origin: host => `http://${host}:${port}`, count: host => hits.filter(hit => hit.host === host).length };
 }
 
@@ -733,8 +758,7 @@ test('R2-n2: a start page whose script moves to another declared origin is not p
     if (host === 'b.localhost') release?.();
     response.end(page(`${host}${request.url}`));
   });
-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  t.after(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); });
+  await listenLoopback(t, server);
   const a = `http://a.localhost:${server.address().port}`, b = `http://b.localhost:${server.address().port}`;
   const browser = new AuditBrowser(parseAuditManifest({ projectRoot: '/tmp', url: `${a}/`, allowedOrigins: [b] }));
   t.after(() => browser.close());

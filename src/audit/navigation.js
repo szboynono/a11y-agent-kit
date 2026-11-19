@@ -77,14 +77,27 @@ export function isCloudMetadataHost(hostname) {
 // connects. Addresses are not pinned, so a DNS answer that changes between the two lookups (DNS rebinding) is not stopped.
 
 /**
- * Cloud instance metadata endpoints, blocked by exact address in every session, whether or not they fall in a
- * private range: 169.254.169.254 (AWS, Google Cloud, Azure, Oracle Cloud, OpenStack and others), 169.254.170.2
- * (AWS ECS task metadata and credentials), fd00:ec2::254 (AWS IPv6 instance metadata) and 100.100.100.200 (Alibaba Cloud).
+ * Cloud instance metadata and platform endpoints, blocked by exact address in every session, whether or not they fall
+ * in a private range. This is a list of known addresses, not an exhaustive one:
+ * - 169.254.169.254: AWS, Google Cloud, Azure, Oracle Cloud, OpenStack, Huawei Cloud, DigitalOcean and others;
+ * - 169.254.170.2 and 169.254.170.23 / fd00:ec2::23: AWS ECS task credentials and the EKS Pod Identity agent;
+ * - fd00:ec2::254: AWS IPv6 instance metadata; fd20:ce::254: Google Cloud IPv6 metadata;
+ * - 168.63.129.16: the Azure platform (WireServer) address; 192.0.0.192: legacy Oracle Cloud metadata;
+ * - 100.100.100.200: Alibaba Cloud; 169.254.0.23: Tencent Cloud; fe80::a9fe:a9fe: OpenStack IPv6 metadata.
  */
-export const CLOUD_METADATA_ADDRESSES = Object.freeze(['169.254.169.254', '169.254.170.2', 'fd00:ec2::254', '100.100.100.200']);
+export const CLOUD_METADATA_ADDRESSES = Object.freeze(['169.254.169.254', '169.254.170.2', '169.254.170.23', 'fd00:ec2::254', 'fd00:ec2::23',
+  'fd20:ce::254', '168.63.129.16', '192.0.0.192', '100.100.100.200', '169.254.0.23', 'fe80::a9fe:a9fe']);
 
 /** Upper bound for one DNS lookup. A lookup that has not answered by then counts as failed (`LOOKUP_TIMEOUT`). */
 export const DNS_LOOKUP_TIMEOUT_MS = 2000;
+/**
+ * Upper bound for all DNS waiting in one main-frame navigation, its redirect hops included (and, for a `navigate`
+ * action, its check before leaving). A hop reached after the navigation has used it is not looked up
+ * (`LOOKUP_BUDGET_EXHAUSTED`) and continues on the literal-only check, so a slow resolver adds at most this much.
+ */
+export const DNS_NAVIGATION_WAIT_MS = DNS_LOOKUP_TIMEOUT_MS;
+/** Hosts whose lookup failed are remembered for the session, at most this many, and are not looked up again. */
+export const DNS_FAILED_HOST_LIMIT = 64;
 
 // Special-purpose ranges, checked in order. 198.18.0.0/15 (benchmarking) is deliberately absent: fake-IP proxies
 // answer every name from it, and blocking it would block every site for their users. Such proxies hide the real
@@ -122,10 +135,12 @@ const zero = (bytes, from, to) => bytes.slice(from, to).every(byte => byte === 0
  * IPv4 addresses embedded in an IPv6 address, in the forms a connection can reach: IPv4-mapped (::ffff:0:0/96),
  * IPv4-translated (::ffff:0:0:0/96), NAT64 well-known (64:ff9b::/96) and local-use (64:ff9b:1::/48, read from
  * the last 32 bits as in a /96 deployment), 6to4 (2002::/16) and Teredo (2001::/32: server and de-obfuscated client).
+ * The deprecated IPv4-compatible form (::/96, other than :: and ::1) is read too, so a metadata address in it is named.
  */
 function embeddedIpv4(canonical) {
   const b = ipv6Bytes(canonical);
   if (zero(b, 0, 10) && b[10] === 255 && b[11] === 255) return [quad(b, 12)];
+  if (zero(b, 0, 12) && !zero(b, 12, 15)) return [quad(b, 12)];
   if (zero(b, 0, 8) && b[8] === 255 && b[9] === 255 && zero(b, 10, 12)) return [quad(b, 12)];
   if (b[0] === 0 && b[1] === 0x64 && b[2] === 0xff && b[3] === 0x9b && (zero(b, 4, 12) || (b[4] === 0 && b[5] === 1))) return [quad(b, 12)];
   if (b[0] === 0x20 && b[1] === 0x02) return [quad(b, 2)];
@@ -182,23 +197,39 @@ async function boundedLookup(resolver, host, timeoutMs) {
   } finally { clearTimeout(timer); }
 }
 
+/** Remember a failed host for the session; the oldest entry is dropped beyond `DNS_FAILED_HOST_LIMIT`. */
+function rememberFailedHost(failedHosts, host, error) {
+  if (!(failedHosts instanceof Map)) return;
+  failedHosts.delete(host); failedHosts.set(host, error);
+  if (failedHosts.size > DNS_FAILED_HOST_LIMIT) failedHosts.delete(failedHosts.keys().next().value);
+}
+
 /**
  * Resolve the target of an otherwise allowed main-frame request. A cloud metadata address in the answer denies it in
  * every session; in a public session any other non-public address denies it too (`private_network_target`, not
- * overridable). A lookup that fails, times out (`DNS_LOOKUP_TIMEOUT_MS`) or returns nothing does not deny: the request
- * continues on the literal-only check and the result is marked `degraded` with `resolution.error`. Every result that
- * performed a lookup carries the structured `resolution` record. `resolver` is `{ name, lookup(hostname) }` returning
- * `[{ address, family }]` (or address strings).
+ * overridable). A lookup that fails, times out (`timeoutMs`, at most `DNS_LOOKUP_TIMEOUT_MS`) or returns nothing does
+ * not deny: the request continues on the literal-only check and the result is marked `degraded` with
+ * `resolution.error`. Every result that performed a lookup carries the structured `resolution` record. `resolver` is
+ * `{ name, lookup(hostname) }` returning `[{ address, family }]` (or address strings).
+ *
+ * `failedHosts` (a session Map of host to error code) makes failures sticky: a failed host is recorded there, and a
+ * later request to it degrades at once with the recorded error and `skipped: 'host_failed_before'`, without waiting
+ * again. A `timeoutMs` of 0 or less (the navigation's DNS wait is used up) degrades at once with
+ * `LOOKUP_BUDGET_EXHAUSTED` and `skipped: 'budget_exhausted'`; that host is not remembered, since it was not tried.
  */
-export async function resolveNavigationTarget({ url, policy, resolver = systemHostResolver, timeoutMs = DNS_LOOKUP_TIMEOUT_MS }) {
+export async function resolveNavigationTarget({ url, policy, resolver = systemHostResolver, timeoutMs = DNS_LOOKUP_TIMEOUT_MS, failedHosts }) {
   const host = resolutionHost(url);
   if (!host) return { allowed: true };
   const base = { host, resolver: typeof resolver?.name === 'string' && resolver.name ? resolver.name : 'injected' };
-  const degraded = error => ({ allowed: true, degraded: true, resolution: { ...base, addresses: [], error } });
+  const degraded = (error, skipped) => ({ allowed: true, degraded: true, ...(skipped ? { skipped } : {}), resolution: { ...base, addresses: [], error } });
+  const known = failedHosts instanceof Map ? failedHosts.get(host) : undefined;
+  if (known !== undefined) return degraded(known, 'host_failed_before');
+  if (!(timeoutMs > 0)) return degraded('LOOKUP_BUDGET_EXHAUSTED', 'budget_exhausted');
+  const failed = error => { rememberFailedHost(failedHosts, host, error); return degraded(error); };
   let answers;
-  try { answers = await boundedLookup(resolver, host, timeoutMs); }
-  catch (error) { return degraded(typeof error?.code === 'string' && error.code ? error.code : 'LOOKUP_FAILED'); }
-  if (!Array.isArray(answers) || answers.length === 0) return degraded('NO_ADDRESSES');
+  try { answers = await boundedLookup(resolver, host, Math.min(timeoutMs, DNS_LOOKUP_TIMEOUT_MS)); }
+  catch (error) { return failed(typeof error?.code === 'string' && error.code ? error.code : 'LOOKUP_FAILED'); }
+  if (!Array.isArray(answers) || answers.length === 0) return failed('NO_ADDRESSES');
   const addresses = answers.map(answer => classifyAddress(typeof answer === 'string' ? answer : answer?.address));
   const cloudMetadata = addresses.some(item => item.cloudMetadata);
   const resolution = { ...base, addresses, ...(cloudMetadata ? { cloudMetadata: true } : {}) };
@@ -242,25 +273,28 @@ function boundResolution(value) {
 }
 
 const FAILURE_LIMIT = 8;
-export const DNS_DEGRADED_NOTE = 'At least one DNS lookup failed or timed out, so those requests were allowed on the IP-literal and localhost-name check only. A DNS name that reaches a private address may not have been detected. This is common behind a proxy that resolves names itself, or offline.';
+export const DNS_DEGRADED_NOTE = 'At least one DNS lookup failed or timed out, or was skipped, so those requests were allowed on the IP-literal and localhost-name check only. A host whose lookup failed is not looked up again in this session, and a navigation that has used its DNS wait does not look up its later hops. A DNS name that reaches a private address may not have been detected. This is common behind a proxy that resolves names itself, or offline.';
 const SESSION_TYPES = ['public', 'private'], SESSION_BASES = ['literal', 'resolution', 'literal_fallback'];
 
 /**
  * The bounded, additive DNS check summary for one session, used in the navigation report, JSONL and MCP. `status` is
- * `checked` (every lookup answered), `degraded` (at least one lookup failed or timed out; see `failures`), `not_used`
- * (no DNS name was looked up) or `not_applicable` (network replay sends no requests). `session` records how the
- * session type was decided: from the start URL literal, from its DNS answer, or from the literal after that lookup failed.
+ * `checked` (every lookup answered), `degraded` (at least one lookup failed, timed out or was skipped; see `failures`),
+ * `not_used` (no DNS name was looked up) or `not_applicable` (network replay sends no requests). `session` records how
+ * the session type was decided: from the start URL literal, from its DNS answer, or from the literal after that lookup
+ * failed. `skippedLookups` (only when nonzero) counts requests allowed without a lookup: to a host that already failed
+ * in this session, or after their navigation used its DNS wait. `failures` lists each failed host once, plus each host
+ * skipped for the wait (`LOOKUP_BUDGET_EXHAUSTED`); `entryCount` is how many such entries there were in all.
  */
-export function dnsCheckSummary({ replay = false, session, lookups = 0, failures = [], failureCount = failures.length } = {}) {
-  const status = replay ? 'not_applicable' : failureCount > 0 ? 'degraded' : lookups > 0 ? 'checked' : 'not_used';
+export function dnsCheckSummary({ replay = false, session, lookups = 0, failures = [], failureCount = failures.length, skipped = 0, entryCount = Math.max(failureCount, failures.length) } = {}) {
+  const status = replay ? 'not_applicable' : failureCount > 0 || skipped > 0 ? 'degraded' : lookups > 0 ? 'checked' : 'not_used';
   const text = (value, limit) => typeof value === 'string' ? value.slice(0, limit) : null;
   const kept = failures.slice(0, FAILURE_LIMIT).map(item => ({ stage: text(item?.stage, 64), host: text(item?.host, HOST_LIMIT), error: text(item?.error, ERROR_CODE_LIMIT) }));
   return {
     status,
     session: { type: SESSION_TYPES.includes(session?.type) ? session.type : 'public', basis: SESSION_BASES.includes(session?.basis) ? session.basis : 'literal',
       ...(session?.resolution ? { resolution: boundResolution(session.resolution) } : {}) },
-    lookups, failedLookups: failureCount,
-    ...(failureCount > 0 ? { failures: kept, ...(failureCount > kept.length ? { failuresOmitted: failureCount - kept.length } : {}), note: DNS_DEGRADED_NOTE } : {}),
+    lookups, failedLookups: failureCount, ...(skipped > 0 ? { skippedLookups: skipped } : {}),
+    ...(failureCount > 0 || skipped > 0 ? { failures: kept, ...(entryCount > kept.length ? { failuresOmitted: entryCount - kept.length } : {}), note: DNS_DEGRADED_NOTE } : {}),
   };
 }
 

@@ -15,15 +15,16 @@ import { parseAuditManifest } from '../src/audit/schema.js';
 import { errorPayload } from '../src/audit/error-details.js';
 import { errorRecord } from '../src/evidence.js';
 import {
-  boundNavigationDetails, classifyAddress, CLOUD_METADATA_ADDRESSES, decideNavigation, DNS_LOOKUP_TIMEOUT_MS, FLOOR_REASONS, isCloudMetadataHost, isPrivateHost,
-  navigationBlockDetails, navigationPolicy, resolutionHost, resolveNavigationTarget, startSession, systemHostResolver,
+  boundNavigationDetails, classifyAddress, CLOUD_METADATA_ADDRESSES, decideNavigation, DNS_FAILED_HOST_LIMIT, DNS_LOOKUP_TIMEOUT_MS, DNS_NAVIGATION_WAIT_MS, dnsCheckSummary,
+  FLOOR_REASONS, isCloudMetadataHost, isPrivateHost, navigationBlockDetails, navigationPolicy, resolutionHost, resolveNavigationTarget, startSession, systemHostResolver,
 } from '../src/audit/navigation.js';
 import { externalProbe } from './helpers.js';
 
 // Loopback fixtures only, and no real DNS: Chromium maps the *.example names below to 127.0.0.1 with
 // --host-resolver-rules, while the DNS check runs against an injected resolver that answers from a table.
 const page = title => `<!doctype html><html lang="en"><head><title>${title}</title></head><body><main><h1>${title}</h1></main></body></html>`;
-const MAPPED = ['public-site.example', 'internal.example', 'rebind.example', 'meta.example', 'nxdomain.example', 'staging.example', 'slow.example'];
+const MAPPED = ['public-site.example', 'internal.example', 'rebind.example', 'meta.example', 'nxdomain.example', 'staging.example', 'slow.example',
+  'hop.example', 'hop2.example', 'nav.example', 'nav2.example', 'mixed.example'];
 const launchArgs = [`--host-resolver-rules=${MAPPED.map(host => `MAP ${host} 127.0.0.1`).join(', ')}`];
 
 /** An injected resolver: `table[host]` is an address list, or an Error to throw. Every call is recorded. */
@@ -96,8 +97,10 @@ test('DNS guard: every resolved address is classified, and only public, non-meta
 });
 
 test('DNS guard: the cloud metadata list is checked by exact address, including IPv4-mapped forms', () => {
-  assert.deepEqual([...CLOUD_METADATA_ADDRESSES], ['169.254.169.254', '169.254.170.2', 'fd00:ec2::254', '100.100.100.200']);
-  for (const address of [...CLOUD_METADATA_ADDRESSES, 'FD00:EC2:0:0::254', '::ffff:169.254.169.254', '::ffff:a9fe:a9fe']) {
+  // A known list, not an exhaustive one (see CLOUD_METADATA_ADDRESSES).
+  assert.deepEqual([...CLOUD_METADATA_ADDRESSES], ['169.254.169.254', '169.254.170.2', '169.254.170.23', 'fd00:ec2::254', 'fd00:ec2::23',
+    'fd20:ce::254', '168.63.129.16', '192.0.0.192', '100.100.100.200', '169.254.0.23', 'fe80::a9fe:a9fe']);
+  for (const address of [...CLOUD_METADATA_ADDRESSES, 'FD00:EC2:0:0::254', '::ffff:169.254.169.254', '::ffff:a9fe:a9fe', '::a9fe:a9fe', '::ffff:168.63.129.16', 'fe80::a9fe:a9fe%eth0']) {
     const result = classifyAddress(address);
     assert.equal(result.cloudMetadata, true, address); assert.equal(result.blocked, true, address);
   }
@@ -191,9 +194,9 @@ test('DNS guard: the resolution record is bounded in block details and in agent/
 
 // ---------- Browser integration (loopback fixture, injected resolver) ----------
 
-test('DNS guard start: a public start URL whose name resolves to a private address is never contacted', async t => {
-  // The private address here is a cloud metadata endpoint (link-local): the one start answer that is still refused.
-  // A start name that resolves to any other non-public address opens a private session instead (see the B1 tests below).
+test('DNS guard start: a public start URL whose name resolves to a cloud metadata address is never contacted', async t => {
+  // Renamed from "...resolves to a private address...": since B1 a start name that resolves to any other non-public
+  // address opens a private session instead (see the B1 tests below); a cloud metadata answer is still refused.
   const fixture = await site(t);
   const { resolver, calls } = tableResolver({ 'public-site.example': ['8.8.8.8', '169.254.169.254'] });
   const { browser, error } = await startBlocked({ projectRoot: '/tmp', url: `${fixture.origin('public-site.example')}/` }, { hostResolver: resolver });
@@ -440,7 +443,7 @@ test('DNS guard M1: a lookup that never answers degrades start, navigate and cli
   let started = performance.now();
   const navigated = await browser.execute({ action: 'navigate', path: '/other' }, 4000);
   assert.equal(navigated.success, true, JSON.stringify(navigated.error)); assert.ok(performance.now() - started < bound, 'navigate is bounded');
-  assert.equal(calls.length, 2, 'navigate resolves once: the request reuses the preflight answer');
+  assert.equal(calls.length, 1, 'the host already failed at the start, so navigate does not look it up again');
   started = performance.now();
   const clicked = await browser.execute({ action: 'click', selector: '#next' }, 4000);
   assert.equal(clicked.success, true, JSON.stringify(clicked.error)); assert.ok(performance.now() - started < bound, 'click is bounded');
@@ -450,8 +453,9 @@ test('DNS guard M1: a lookup that never answers degrades start, navigate and cli
   const floor = await browser.execute({ action: 'navigate', path: `${loopback}/` });
   assert.equal(floor.error.navigation.reason, 'private_network_target');
   const { dnsCheck } = browser.navigationReport();
-  assert.equal(dnsCheck.status, 'degraded'); assert.equal(dnsCheck.failedLookups, 3); assert.equal(dnsCheck.lookups, 3);
-  assert.deepEqual(dnsCheck.failures.map(item => [item.stage, item.error]), [['audit-browser-start', 'LOOKUP_TIMEOUT'], ['navigate', 'LOOKUP_TIMEOUT'], ['click', 'LOOKUP_TIMEOUT']]);
+  // One lookup timed out; the navigate check and the click hop reused that failure instead of waiting again.
+  assert.equal(dnsCheck.status, 'degraded'); assert.equal(dnsCheck.failedLookups, 1); assert.equal(dnsCheck.lookups, 1); assert.equal(dnsCheck.skippedLookups, 2);
+  assert.deepEqual(dnsCheck.failures.map(item => [item.stage, item.error]), [['audit-browser-start', 'LOOKUP_TIMEOUT']]);
   assert.deepEqual([dnsCheck.session.type, dnsCheck.session.basis, dnsCheck.session.resolution.error], ['public', 'literal_fallback', 'LOOKUP_TIMEOUT']);
   assert.match(dnsCheck.note, /may not have been detected/);
 });
@@ -507,4 +511,157 @@ test('DNS guard M1 MCP: a degraded check is in the start response and in later r
   assert.equal(started.dnsCheck.status, 'degraded'); assert.equal(started.dnsCheck.session.resolution.error, 'ENOTFOUND');
   const stepped = (await handlers.get('a11y_audit_request')({ runId: started.runId, request: { tool: 'step', actions: [{ action: 'snapshot' }] } })).structuredContent;
   assert.equal(stepped.success, true); assert.equal(stepped.dnsCheck.status, 'degraded'); assert.match(stepped.dnsCheck.note, /may not have been detected/);
+});
+
+// ---------- MJ-1: slow DNS is paid at most once per host and once per navigation ----------
+
+test('DNS guard MJ-1: a failed host is remembered for the session, and a used-up DNS wait skips the lookup', async () => {
+  const failedHosts = new Map();
+  let calls = 0;
+  const hung = { name: 'hung', lookup: () => { calls++; return new Promise(() => {}); } };
+  const first = await resolveNavigationTarget({ url: 'https://slow.example/a', policy: publicPolicy, resolver: hung, timeoutMs: 30, failedHosts });
+  assert.deepEqual(first, { allowed: true, degraded: true, resolution: { host: 'slow.example', resolver: 'hung', addresses: [], error: 'LOOKUP_TIMEOUT' } });
+  assert.deepEqual([...failedHosts], [['slow.example', 'LOOKUP_TIMEOUT']]);
+  const started = performance.now();
+  const again = await resolveNavigationTarget({ url: 'https://slow.example/b', policy: publicPolicy, resolver: hung, failedHosts });
+  assert.ok(performance.now() - started < 50, 'no second wait');
+  assert.deepEqual(again, { allowed: true, degraded: true, skipped: 'host_failed_before', resolution: { host: 'slow.example', resolver: 'hung', addresses: [], error: 'LOOKUP_TIMEOUT' } });
+  assert.equal(calls, 1, 'the resolver is not called again for that host');
+  // A fast failure is remembered the same way; a success is not.
+  const answering = { name: 'table', lookup: async host => { calls++; if (host === 'nxdomain.example') throw dnsError('ENOTFOUND'); return ['8.8.8.8']; } };
+  await resolveNavigationTarget({ url: 'https://nxdomain.example/', policy: publicPolicy, resolver: answering, failedHosts });
+  await resolveNavigationTarget({ url: 'https://public-site.example/', policy: publicPolicy, resolver: answering, failedHosts });
+  assert.equal(failedHosts.get('nxdomain.example'), 'ENOTFOUND'); assert.equal(failedHosts.has('public-site.example'), false);
+  // A navigation that has used its DNS wait does not look up again, and that untried host is not remembered.
+  const exhausted = await resolveNavigationTarget({ url: 'https://hop2.example/', policy: publicPolicy, resolver: answering, timeoutMs: 0, failedHosts });
+  assert.deepEqual(exhausted, { allowed: true, degraded: true, skipped: 'budget_exhausted', resolution: { host: 'hop2.example', resolver: 'table', addresses: [], error: 'LOOKUP_BUDGET_EXHAUSTED' } });
+  assert.equal(failedHosts.has('hop2.example'), false); assert.equal(calls, 3);
+  // The remembered set is bounded; the oldest host is dropped first.
+  const failing = { name: 'f', lookup: async () => { throw dnsError('ENOTFOUND'); } };
+  for (let index = 0; index < DNS_FAILED_HOST_LIMIT + 5; index++) await resolveNavigationTarget({ url: `https://h${index}.example/`, policy: publicPolicy, resolver: failing, failedHosts });
+  assert.equal(failedHosts.size, DNS_FAILED_HOST_LIMIT); assert.equal(failedHosts.has('slow.example'), false); assert.equal(failedHosts.has(`h${DNS_FAILED_HOST_LIMIT + 4}.example`), true);
+  assert.equal(DNS_NAVIGATION_WAIT_MS <= DNS_LOOKUP_TIMEOUT_MS, true, 'one navigation never waits longer than one lookup bound');
+});
+
+/** A resolver that never answers, recording each host it was asked for. */
+function hungResolver() {
+  const calls = [];
+  return { calls, resolver: { name: 'hung', lookup: host => { calls.push(host); return new Promise(() => {}); } } };
+}
+const timed = async run => { const started = performance.now(); const value = await run(); return { value, ms: Math.round(performance.now() - started) }; };
+// One DNS wait per navigation plus loopback page loads; the per-hop behavior this replaces took 2 s per hop.
+const ONE_WAIT_BOUND = DNS_NAVIGATION_WAIT_MS + 1500;
+
+test('DNS guard MJ-1: with a hanging resolver, a 7-hop same-host start and a click through same-host redirects succeed after one wait', async t => {
+  const fixture = await site(t, (host, url) => {
+    const hop = /^\/r(\d+)$/.exec(url);
+    if (hop && Number(hop[1]) > 0) return { location: `/r${Number(hop[1]) - 1}` };
+    return { body: page(`${host}${url}`).replace('</main>', '<a id="same" href="/r2">Same</a></main>') };
+  });
+  const slow = fixture.origin('slow.example');
+  const { resolver, calls } = hungResolver();
+  const browser = new AuditBrowser(parseAuditManifest({ projectRoot: '/tmp', url: `${slow}/r7` }), { launchArgs, hostResolver: resolver });
+  t.after(() => browser.close());
+  const start = await timed(() => browser.start());
+  t.diagnostic(`start through 7 same-host redirects: ${start.ms} ms`);
+  assert.ok(start.ms < ONE_WAIT_BOUND, `start took ${start.ms} ms`);
+  assert.equal(browser.navigationReport().redirectChain.length, 8); assert.equal(browser.navigationReport().finalUrl, `${slow}/r0`);
+  assert.deepEqual(calls, ['slow.example'], 'one lookup for the host, not one per hop');
+
+  const click = await timed(() => browser.execute({ action: 'click', selector: '#same' }));
+  t.diagnostic(`click through 2 same-host redirects: ${click.ms} ms`);
+  assert.equal(click.value.success, true, JSON.stringify(click.value.error)); assert.ok(click.ms < ONE_WAIT_BOUND, `click took ${click.ms} ms`);
+  assert.equal(fixture.count('slow.example'), 8 + 3);
+  const { dnsCheck } = browser.navigationReport();
+  assert.deepEqual([dnsCheck.status, dnsCheck.lookups, dnsCheck.failedLookups, dnsCheck.skippedLookups], ['degraded', 1, 1, 7 + 3]);
+  assert.deepEqual(dnsCheck.failures, [{ stage: 'audit-browser-start', host: 'slow.example', error: 'LOOKUP_TIMEOUT' }]);
+  assert.deepEqual([dnsCheck.session.basis, dnsCheck.session.resolution.error], ['literal_fallback', 'LOOKUP_TIMEOUT']);
+});
+
+test('DNS guard MJ-1: with a hanging resolver, a click and a navigate through cross-host redirects share one DNS wait per navigation', async t => {
+  const fixture = await site(t, (host, url, port) => {
+    const hop = /^\/r(\d+)$/.exec(url);
+    if (hop && Number(hop[1]) > 0) return { location: `/r${Number(hop[1]) - 1}` };
+    if (host === 'hop.example' && url === '/x') return { location: `http://hop2.example:${port}/y` };
+    if (host === 'nav.example' && url === '/n') return { location: `http://nav2.example:${port}/z` };
+    return { body: page(`${host}${url}`).replace('</main>', `<a id="cross" href="http://hop.example:${port}/x">Cross</a></main>`) };
+  });
+  const [slow, hop, hop2, nav, nav2] = ['slow.example', 'hop.example', 'hop2.example', 'nav.example', 'nav2.example'].map(fixture.origin);
+  const { resolver, calls } = hungResolver();
+  const browser = new AuditBrowser(parseAuditManifest({ projectRoot: '/tmp', url: `${slow}/`, followRedirects: true, allowedOrigins: [hop, hop2, nav, nav2] }), { launchArgs, hostResolver: resolver });
+  t.after(() => browser.close());
+  await browser.start();
+
+  // Click default timeout is 3 s; two fresh hosts at 2 s each used to exceed it.
+  const click = await timed(() => browser.execute({ action: 'click', selector: '#cross' }));
+  t.diagnostic(`click through a cross-host redirect (2 fresh hosts): ${click.ms} ms`);
+  assert.equal(click.value.success, true, JSON.stringify(click.value.error)); assert.ok(click.ms < ONE_WAIT_BOUND, `click took ${click.ms} ms`);
+  assert.equal(fixture.count('hop2.example'), 1);
+
+  // A 4 s navigate: its check before leaving and its redirect hops share one wait.
+  const navigate = await timed(() => browser.execute({ action: 'navigate', path: `${nav}/n` }, 4000));
+  t.diagnostic(`navigate (4 s budget) through a cross-host redirect (2 fresh hosts): ${navigate.ms} ms`);
+  assert.equal(navigate.value.success, true, JSON.stringify(navigate.value.error)); assert.ok(navigate.ms < ONE_WAIT_BOUND, `navigate took ${navigate.ms} ms`);
+  assert.equal(fixture.count('nav2.example'), 1);
+
+  // A host that already failed costs nothing, however many redirects follow.
+  const again = await timed(() => browser.execute({ action: 'navigate', path: `${slow}/r3` }, 4000));
+  t.diagnostic(`navigate through 3 same-host redirects to a failed host: ${again.ms} ms`);
+  assert.equal(again.value.success, true, JSON.stringify(again.value.error)); assert.ok(again.ms < 1500, `navigate took ${again.ms} ms`);
+
+  assert.deepEqual(calls, ['slow.example', 'hop.example', 'nav.example'], 'each fresh host is looked up once; hosts past a used-up wait are not');
+  const { dnsCheck } = browser.navigationReport();
+  assert.deepEqual([dnsCheck.status, dnsCheck.lookups, dnsCheck.failedLookups, dnsCheck.skippedLookups], ['degraded', 3, 3, 2 + 1 + 3]);
+  assert.deepEqual(dnsCheck.failures.map(item => [item.stage, item.host, item.error]), [
+    ['audit-browser-start', 'slow.example', 'LOOKUP_TIMEOUT'], ['click', 'hop.example', 'LOOKUP_TIMEOUT'], ['click', 'hop2.example', 'LOOKUP_BUDGET_EXHAUSTED'],
+    ['navigate', 'nav.example', 'LOOKUP_TIMEOUT'], ['navigate', 'nav2.example', 'LOOKUP_BUDGET_EXHAUSTED']]);
+  assert.match(dnsCheck.note, /not looked up again/);
+});
+
+// ---------- m-1: a start answer with both public and private addresses ----------
+
+test('DNS guard m-1: a start answer with both public and private addresses opens a private session and records both', async t => {
+  const answer = ['8.8.8.8', '10.0.0.5'];
+  const mixed = startSession({ allowed: false, reason: 'private_network_target', overridable: false,
+    resolution: { host: 'mixed.example', resolver: 'r', addresses: answer.map(classifyAddress) } }, publicPolicy);
+  assert.deepEqual([mixed.decision.allowed, mixed.session.type, mixed.session.basis], [true, 'private', 'resolution']);
+
+  const fixture = await site(t);
+  const start = fixture.origin('mixed.example'), loopback = fixture.origin('127.0.0.1');
+  const { resolver, calls } = tableResolver({ 'mixed.example': answer });
+  const browser = new AuditBrowser(parseAuditManifest({ projectRoot: '/tmp', url: `${start}/`, allowedOrigins: [loopback] }), { launchArgs, hostResolver: resolver });
+  t.after(() => browser.close());
+  await browser.start();
+  const { dnsCheck } = browser.navigationReport();
+  assert.deepEqual(dnsCheck.session, { type: 'private', basis: 'resolution', resolution: { host: 'mixed.example', resolver: 'test-table', addresses: [
+    { address: '8.8.8.8', family: 4, category: 'public', blocked: false }, { address: '10.0.0.5', family: 4, category: 'private', blocked: true }] } });
+  assert.equal(browser.navigationPolicy.publicSession, false);
+  // Being private, the session may reach a declared private literal.
+  assert.equal((await browser.execute({ action: 'navigate', path: `${loopback}/` })).success, true, 'declared loopback literal in a private session');
+  // A navigate resolves its target once: the request reuses the check made before leaving.
+  assert.equal((await browser.execute({ action: 'navigate', path: `${start}/two` })).success, true);
+  assert.deepEqual(calls, ['mixed.example', 'mixed.example']);
+  assert.equal(fixture.count('mixed.example'), 2);
+});
+
+// ---------- Size of the dnsCheck record repeated in responses ----------
+
+test('DNS guard: dnsCheck stays within a fixed size at its largest, so repeating it in each response is bounded', () => {
+  const longHost = `${'a'.repeat(300)}.example`;
+  const addresses = Array.from({ length: 40 }, (_, index) => classifyAddress(`::ffff:10.0.${index}.1`));
+  const largest = dnsCheckSummary({ session: { type: 'public', basis: 'literal_fallback', resolution: { host: longHost, resolver: 'r'.repeat(100), addresses, error: 'E'.repeat(100) } },
+    lookups: 10_000, failures: Array.from({ length: 50 }, () => ({ stage: 's'.repeat(100), host: longHost, error: 'E'.repeat(100) })), failureCount: 10_000, skipped: 10_000, entryCount: 20_000 });
+  assert.equal(largest.failures.length, 8); assert.equal(largest.failuresOmitted, 20_000 - 8); assert.equal(largest.session.resolution.addresses.length, 16);
+  const bytes = Buffer.byteLength(JSON.stringify(largest));
+  assert.ok(bytes <= 7 * 1024, `largest dnsCheck is ${bytes} bytes`);
+  // Well inside the 20,000-character MCP response cap that every response is bounded to.
+  assert.ok(bytes < 20_000 / 2);
+});
+
+test('DNS guard HTML: the limits list counts requests that were not looked up after a failure', () => {
+  const base = { kind: 'audit-proposal', runId: 'r', findings: [], coverage: [], standard: { version: '2.2', targetLevel: 'AA' }, auditor: { name: 'A' }, manifest: { url: 'http://slow.example/' } };
+  const render = dnsCheck => { const html = renderAuditReportHtml({ ...base, navigation: { finalUrl: 'http://slow.example/', redirects: 0, dnsCheck } }); return html.slice(html.indexOf('id="scope"')); };
+  assert.match(render({ status: 'degraded', session: { type: 'public', basis: 'literal_fallback' }, lookups: 1, failedLookups: 1, skippedLookups: 7 }),
+    /1 of 1 main-document DNS lookup failed or timed out\. 7 later main-document requests were not looked up, because the host had already failed or the navigation had used its DNS wait\./);
+  assert.doesNotMatch(render({ status: 'degraded', session: { type: 'public', basis: 'literal_fallback' }, lookups: 1, failedLookups: 1 }), /not looked up/);
 });

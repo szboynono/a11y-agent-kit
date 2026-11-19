@@ -7,7 +7,7 @@ import { digest, errorRecord, ToolError } from '../evidence.js';
 import { decodePng, pixelAt, relativeLuminance, contrastRatio, pngDimensions } from './pixels.js';
 import { auditAxeTags } from './schema.js';
 import { loadNetworkReplay } from './network-replay.js';
-import { clipUrl, decideNavigation, dnsCheckSummary, DNS_LOOKUP_TIMEOUT_MS, navigationBlockDetails, navigationPolicy, redactUrl, resolutionHost, resolveNavigationTarget, startSession, systemHostResolver, withNavigation } from './navigation.js';
+import { clipUrl, decideNavigation, dnsCheckSummary, DNS_NAVIGATION_WAIT_MS, navigationBlockDetails, navigationPolicy, redactUrl, resolutionHost, resolveNavigationTarget, startSession, systemHostResolver, withNavigation } from './navigation.js';
 import { buildElementRows, compactAxNode, INTERACTIVE_RULE, INSPECT_MANY_PRESET_LIMIT } from './inspect-many.js';
 import { collectNonTextFacts, analyzeNonText, NONTEXT_SCOPE } from './nontext.js';
 
@@ -518,7 +518,7 @@ export class AuditBrowser {
     this.manifest = manifest;
     this.hostResolver = hostResolver ?? systemHostResolver;
     // Main-frame DNS checks still running; an action waits for those it started before reading its blocks.
-    // Each check is bounded by DNS_LOOKUP_TIMEOUT_MS, so this wait is bounded too.
+    // Each navigation's DNS waiting is bounded by DNS_NAVIGATION_WAIT_MS, so this wait is bounded too.
     this.pendingScreens = new Set();
     this.axeTags = Object.freeze(auditAxeTags(manifest.standard));
     this.handleSignals = handleSignals;
@@ -530,6 +530,8 @@ export class AuditBrowser {
     // Session type: from the manifest host literal until the start URL's own DNS answer decides it (startSession).
     this.sessionType = { type: this.navigationPolicy.publicSession ? 'public' : 'private', basis: 'literal' };
     this.dnsLookups = 0; this.dnsFailures = []; this.dnsFailureCount = 0; this.startClassified = false; this.navigatePreflight = null;
+    // Hosts whose lookup failed in this session (host -> error code); they degrade at once instead of waiting again.
+    this.dnsFailedHosts = new Map(); this.dnsSkipped = 0; this.dnsFailureEntries = 0;
     this.baseUrl = manifest.url; this.pinnedToLanding = false; this.startUrl = null;
     // Blocks are counted, not kept in a capped list, so the newest block is always reachable however long the session.
     this.navigationStage = 'audit-browser-start'; this.navigationBlockCount = 0; this.lastNavigationBlock = null;
@@ -609,22 +611,29 @@ export class AuditBrowser {
     this.pendingScreens ??= new Set();
     this.sessionType ??= { type: this.navigationPolicy.publicSession ? 'public' : 'private', basis: 'literal' };
     this.dnsLookups ??= 0; this.dnsFailures ??= []; this.dnsFailureCount ??= 0;
+    this.dnsFailedHosts ??= new Map(); this.dnsSkipped ??= 0; this.dnsFailureEntries ??= 0;
   }
 
-  /** Count one DNS check; a degraded one (failed, timed out or empty) is kept, bounded, for the report. */
+  /**
+   * Count one DNS check; a degraded one (failed, timed out or empty) is kept, bounded, for the report. A request
+   * allowed without a lookup is counted as skipped: a host that already failed is listed once (when it failed), and a
+   * host skipped because its navigation used its DNS wait is listed with `LOOKUP_BUDGET_EXHAUSTED`.
+   */
   noteLookup(screened, stage) {
     if (!screened?.resolution) return;
+    this.ensureNavigationState();
+    const listFailure = () => { this.dnsFailureEntries++; if (this.dnsFailures.length < 8) this.dnsFailures.push({ stage, host: screened.resolution.host, error: screened.resolution.error }); };
+    if (screened.skipped) { this.dnsSkipped++; if (screened.skipped === 'budget_exhausted') listFailure(); return; }
     this.dnsLookups++;
     if (!screened.degraded) return;
-    this.dnsFailureCount++;
-    if (this.dnsFailures.length < 8) this.dnsFailures.push({ stage, host: screened.resolution.host, error: screened.resolution.error });
+    this.dnsFailureCount++; listFailure();
   }
 
   /** The bounded DNS check summary: status, how the session type was decided, and any degraded lookups. */
   dnsCheckReport() {
     this.ensureNavigationState();
     return dnsCheckSummary({ replay: Boolean(this.networkReplay || this.manifest.networkReplay), session: this.sessionType,
-      lookups: this.dnsLookups, failures: this.dnsFailures, failureCount: this.dnsFailureCount });
+      lookups: this.dnsLookups, failures: this.dnsFailures, failureCount: this.dnsFailureCount, skipped: this.dnsSkipped, entryCount: this.dnsFailureEntries });
   }
 
   /** The chain whose network request id matches, newest first. */
@@ -687,22 +696,28 @@ export class AuditBrowser {
    * navigate, click-triggered navigation, every redirect) is checked: a cloud metadata answer blocks it in every session,
    * and any other non-public answer blocks it in a public session, with the same records as a literal target. The start
    * URL's own answer first decides the session type (`startSession`). A failed or timed-out lookup degrades: the hop
-   * continues on the literal-only check and the session's DNS check is reported as degraded.
+   * continues on the literal-only check and the session's DNS check is reported as degraded. Slow DNS is bounded per
+   * navigation, not per hop: all hops of one chain share DNS_NAVIGATION_WAIT_MS, and a host that already failed in this
+   * session is not looked up again, so a hanging resolver delays a navigation by at most that once.
    */
   async screenMainFrameRequest(event) {
     const decision = this.decideMainFrameRequest(event);
     const host = decision.allowed ? resolutionHost(event.request.url) : null;
     if (!host) return decision;
+    this.ensureNavigationState();
     const chain = this.chainByInterception.get(event.requestId), index = chain.hops.length - 1;
     const isStart = !this.startClassified && chain === this.initialChain && index === 0;
-    // A navigate action already resolved its first hop; reuse that answer instead of a second bounded lookup.
-    const preflight = index === 0 && this.navigatePreflight?.host === host ? this.navigatePreflight.result : null;
-    if (preflight) this.navigatePreflight = null;
-    const pending = preflight ? Promise.resolve(preflight) : resolveNavigationTarget({ url: event.request.url, policy: this.navigationPolicy, resolver: this.hostResolver });
+    // A navigate action already resolved its first hop; reuse that answer, and its wait, instead of a second lookup.
+    const reused = index === 0 && this.navigatePreflight?.host === host ? this.navigatePreflight : null;
+    const preflight = reused?.result ?? null;
+    if (reused) { this.navigatePreflight = null; chain.dnsWaitMs = reused.waitedMs ?? 0; }
+    const began = performance.now();
+    const pending = preflight ? Promise.resolve(preflight) : resolveNavigationTarget({ url: event.request.url, policy: this.navigationPolicy, resolver: this.hostResolver,
+      timeoutMs: DNS_NAVIGATION_WAIT_MS - (chain.dnsWaitMs ?? 0), failedHosts: this.dnsFailedHosts });
     this.pendingScreens.add(pending);
     try {
       let screened = await pending;
-      if (!preflight) this.noteLookup(screened, chain.stage);
+      if (!preflight) { chain.dnsWaitMs = (chain.dnsWaitMs ?? 0) + (performance.now() - began); this.noteLookup(screened, chain.stage); }
       if (isStart) {
         this.startClassified = true;
         const outcome = startSession(screened, this.navigationPolicy);
@@ -1088,9 +1103,11 @@ export class AuditBrowser {
           const budget = Math.min(timeoutMs, 15000), started = performance.now();
           // A replayed session sends no network requests, so it resolves nothing; otherwise check the name before leaving.
           if (decision.allowed && !this.networkReplay) {
-            decision = await resolveNavigationTarget({ url: target.href, policy: this.navigationPolicy, resolver: this.hostResolver, timeoutMs: Math.min(DNS_LOOKUP_TIMEOUT_MS, budget) });
+            decision = await resolveNavigationTarget({ url: target.href, policy: this.navigationPolicy, resolver: this.hostResolver,
+              timeoutMs: Math.min(DNS_NAVIGATION_WAIT_MS, budget), failedHosts: this.dnsFailedHosts });
             this.noteLookup(decision, 'navigate');
-            if (decision.allowed && decision.resolution) this.navigatePreflight = { host: decision.resolution.host, result: decision };
+            // The navigation's redirect hops share the DNS wait already spent here.
+            if (decision.allowed && decision.resolution) this.navigatePreflight = { host: decision.resolution.host, result: decision, waitedMs: performance.now() - started };
           }
           if (!decision.allowed) {
             throw withNavigation(new ToolError('UNSAFE_AUDIT_NAVIGATION', 'Navigation must remain on the manifest HTTP(S) origin without credentials.'), navigationBlockDetails({ ...decision, fromUrl: this.page.url(),

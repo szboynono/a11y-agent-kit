@@ -325,7 +325,7 @@ function pageUrls(report) {
   const redirects = Number.isSafeInteger(navigation.redirects) && navigation.redirects >= 0 ? navigation.redirects : null;
   const dns = navigation.dnsCheck && typeof navigation.dnsCheck === 'object' ? navigation.dnsCheck : null;
   const count = value => Number.isSafeInteger(value) && value >= 0 ? value : null;
-  const dnsCheck = dns ? { status: typeof dns.status === 'string' ? dns.status : null, lookups: count(dns.lookups), failedLookups: count(dns.failedLookups),
+  const dnsCheck = dns ? { status: typeof dns.status === 'string' ? dns.status : null, lookups: count(dns.lookups), failedLookups: count(dns.failedLookups), skippedLookups: count(dns.skippedLookups),
     privateByResolution: dns.session?.type === 'private' && dns.session?.basis === 'resolution' } : null;
   return { url: final ?? declared, navigationRecorded: true, finalUrlRecorded: Boolean(final), ...(dnsCheck ? { dnsCheck } : {}),
     ...(declared && (!final || !sameHref(final, declared)) ? { declaredUrl: declared, redirects } : {}) };
@@ -355,7 +355,9 @@ function untestedScope(model) {
   else items.push('Review is a declaration by the named reviewer; the tool does not verify that they are independent.');
   if (model.dnsCheck?.status === 'degraded') {
     const failed = model.dnsCheck.failedLookups, total = model.dnsCheck.lookups;
-    items.push(`DNS check degraded: ${failed === null ? 'some' : failed} of ${total === null ? 'the' : total} main-document DNS lookup${total === 1 ? '' : 's'} failed or timed out. Those navigations were checked against IP literals and localhost names only, so a DNS name that reaches a private address may not have been detected.`);
+    const skipped = model.dnsCheck.skippedLookups;
+    const skippedText = skipped ? ` ${skipped} later main-document request${skipped === 1 ? ' was' : 's were'} not looked up, because the host had already failed or the navigation had used its DNS wait.` : '';
+    items.push(`DNS check degraded: ${failed === null ? 'some' : failed} of ${total === null ? 'the' : total} main-document DNS lookup${total === 1 ? '' : 's'} failed or timed out.${skippedText} Those navigations were checked against IP literals and localhost names only, so a DNS name that reaches a private address may not have been detected.`);
   }
   if (model.dnsCheck?.privateByResolution) items.push('The start URL host name resolved to a non-public address, so the session was treated as private (an internal or staging host): navigation between private addresses was allowed, and cloud metadata addresses stayed blocked.');
   if (model.requiresReReview) items.push(`Review policy ${model.reviewPolicy} is legacy or citation-only. Its previous confirmations need re-review and are displayed as needs review.`);

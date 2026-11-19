@@ -98,8 +98,8 @@
     },
     {
       "path": "examples/byoa-audit.md",
-      "bytes": 18473,
-      "sha256": "d5df6845ede38ad654543e31210f572f468d08b19ef8d4cce3f59301ec7631a9"
+      "bytes": 18558,
+      "sha256": "a4a613a886baba3603d27ec8b2129331c05738010370719febfae598481c375e"
     },
     {
       "path": "examples/codex-cli.md",
@@ -283,8 +283,8 @@
     },
     {
       "path": "src/audit/report-html.js",
-      "bytes": 69450,
-      "sha256": "19e980db99f4f7bfff6da51ab5b505366ec43725eb02be596368540a954f6ceb"
+      "bytes": 70624,
+      "sha256": "3cd2c7b3f517178184fcca4dbaf6f9aea59ccaa86ff9f978d18ffee916e7fe96"
     },
     {
       "path": "src/audit/review-policy.js",
@@ -513,8 +513,8 @@
     },
     {
       "path": "test/audit-report-html.test.js",
-      "bytes": 45869,
-      "sha256": "e44d1b0d6427ff28d4c5880a082654389320a0b617cf6b70c93152ec387a6960"
+      "bytes": 49029,
+      "sha256": "98106903029e8bfacc95797afc19f994250b7235fcf79371ee138a072ccc6f6f"
     },
     {
       "path": "test/audit-request-budget.test.js",

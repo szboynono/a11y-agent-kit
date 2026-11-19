@@ -475,7 +475,9 @@ test('layout has one skip link to a single main, ordered headings, resolvable la
   const references = [{ evidenceId: 'ev-0001', json: 'run/ev-0001.json', png: null, source: 'collection.records' }];
   const html = renderAuditReportHtml(report, { inventory, references, imageNotes: ['Screenshots were not embedded (use --screenshots).'] });
   const { headings, ids, idSet, labelledby, hrefs } = structure(html);
-  assert.ok(html.indexOf('<a class="skip" href="#main">') < html.indexOf('<a ', html.indexOf('<a class="skip"') + 1), 'skip link is the first link');
+  const skip = html.indexOf('<a class="skip" href="#main">Skip to report content</a>');
+  assert.ok(skip > html.indexOf('<body'), 'skip link is present inside the body');
+  assert.equal(html.indexOf('<a '), skip, 'skip link is the first link');
   assert.equal((html.match(/<main[\s>]/g) ?? []).length, 1); assert.match(html, /<main id="main" tabindex="-1">/);
   assert.equal((html.match(/<header class="masthead">/g) ?? []).length, 1); assert.equal((html.match(/<footer/g) ?? []).length, 1);
   assert.equal(headings[0], 1); assert.equal(headings.filter(level => level === 1).length, 1);
@@ -510,7 +512,7 @@ const luminance = hex => {
 const contrast = (a, b) => { const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05); };
 
 test('every drawn colour pair meets its WCAG ratio in light and dark, computed from the same tokens the CSS uses', () => {
-  assert.equal(REPORT_CONTRAST_PAIRS.length, 32);
+  assert.equal(REPORT_CONTRAST_PAIRS.length, 36);
   for (const theme of ['light', 'dark']) {
     const tokens = REPORT_TOKENS[theme];
     for (const [fg, bg, role, required] of REPORT_CONTRAST_PAIRS) {
@@ -522,7 +524,11 @@ test('every drawn colour pair meets its WCAG ratio in light and dark, computed f
   }
   assert.deepEqual(Object.keys(REPORT_TOKENS.light), Object.keys(REPORT_TOKENS.dark));
   assert.match(REPORT_CSS, /@media \(prefers-color-scheme:dark\)/); assert.match(REPORT_CSS, /@media \(forced-colors:active\)/);
-  assert.match(REPORT_CSS, /@media \(prefers-reduced-motion:reduce\)/); assert.match(REPORT_CSS, /@media print\{details::details-content\{content-visibility:visible/);
+  // The disclosure chevron animates on ::before, which a bare * selector does not reach.
+  const reducedMotion = REPORT_CSS.match(/@media \(prefers-reduced-motion:reduce\)\{([^{}]*)\{transition:none!important\}\}/);
+  assert.ok(reducedMotion, 'reduced-motion block disables transitions');
+  assert.deepEqual(reducedMotion[1].split(',').sort(), ['*', '*::after', '*::before']);
+assert.match(REPORT_CSS, /@media print\{details::details-content\{content-visibility:visible/);
   assert.ok(renderAuditReportHtml(reviewed([])).includes(REPORT_CSS));
 });
 
@@ -533,6 +539,7 @@ test('criterion names come from the catalog, then the static WCAG table, else on
   }
   assert.equal(criterionName('4.1.2', {}), 'Name, Role, Value');
   assert.equal(criterionName('4.1.2', { title: 'Catalog title' }), 'Catalog title');
+  assert.equal(criterionName('4.1.2', { title: '  ' }), 'Name, Role, Value');
   assert.equal(criterionName('9.9.9', {}), null); assert.equal(criterionName('__proto__', {}), null);
   const report = reviewed([finding('a', '4.1.2'), finding('b', '9.9.9')]);
   report.coverage = [...coverage, { id: '9.9.9', level: 'AA', url: 'https://www.w3.org/TR/WCAG22/#x' }];
@@ -541,6 +548,10 @@ test('criterion names come from the catalog, then the static WCAG table, else on
   assert.match(html, /<h3 id="sc-9\.9\.9"><a href="[^"]+" rel="noreferrer noopener">SC 9\.9\.9<\/a><\/h3>/);
   report.coverage[3] = { ...report.coverage[3], title: '<Catalog> name' };
   assert.match(renderAuditReportHtml(report), /<span class="sc-name">&lt;Catalog&gt; name<\/span>/);
+  // A catalog row that carries `name` instead of `title` is mapped by normalization.
+  report.coverage[3] = { id: '4.1.2', level: 'AA', name: 'Catalog name key' };
+  assert.equal(normalizeAuditReport(report).coverage[3].title, 'Catalog name key');
+  assert.match(renderAuditReportHtml(report), /<h3 id="sc-4\.1\.2"><span class="sc-id">SC 4\.1\.2<\/span> <span class="sc-name">Catalog name key<\/span><\/h3>/);
 });
 
 test('evidence source paths share a caption directory only when every path has it; otherwise rows keep full paths', () => {
@@ -574,4 +585,34 @@ test('inventory is collapsed behind derived counts and adoption links reach card
   assert.match(detail.html, /Adopted as adopted \(from axeCandidateId\)/);
   assert.match(detail.html, /<article class="finding" id="f-adopted" aria-labelledby="ft-adopted">/);
   assert.match(detail.html, /<h3 id="rec-1"><span class="sc-id">SC 4\.1\.2<\/span> <span class="sc-name">Name, Role, Value<\/span><\/h3><span class="sc-meta">Level AA · original record 1 of 1<\/span>/);
+});
+
+test('finding anchors are unique, resolvable tokens for free-text, colliding and repeated IDs in single-file and bounded output', () => {
+  const ids = ['my finding', 'a"b', 'a_b', 'dup', 'dup', 'a_b-2'];
+  const findings = ids.map((id, i) => finding(id, '4.1.2', { title: `Card ${i}`, source: 'axe', axeCandidateId: `ev-0001:rule:${i}` }));
+  const inventory = ids.map((id, i) => ({ observationId: `obs${i}`, evidenceId: 'ev-0001', ruleId: 'rule', ruleNodeIndex: i, bucket: 'violations', target: ['#x'], binding: { status: 'bound' } }));
+  const report = reviewed(findings);
+  const single = renderAuditReportHtml(report, { inventory });
+  const [, detail] = renderBoundedAuditReportHtml(report, { inventory });
+  for (const html of [single, detail.html]) {
+    const { ids: all, idSet, labelledby, hrefs } = structure(html);
+    assert.equal(all.length, idSet.size, 'unique ids');
+    for (const id of all) assert.match(id, /^[\w.:-]+$/, `id ${id} is one token`);
+    for (const value of labelledby) assert.ok(idSet.has(value), `aria-labelledby ${value}`);
+    for (const href of hrefs.filter(href => href.startsWith('#'))) assert.ok(idSet.has(href.slice(1)), href);
+    const cards = [...html.matchAll(/<article class="finding" id="f-([^"]+)" aria-labelledby="ft-([^"]+)">([\s\S]*?)<\/article>/g)];
+    assert.equal(cards.length, ids.length);
+    for (const [, anchor, title, body] of cards) {
+      assert.equal(title, anchor);
+      assert.match(body, new RegExp(`<h4 class="f-title" id="ft-${anchor}">Card \\d</h4>`));
+      assert.ok(body.includes(`<a href="#f-${anchor}">Link to this finding`), `self-link for ${anchor}`);
+    }
+    // Each card keeps its own record: the anchor maps back to the title of the same original record.
+    const byAnchor = new Map(cards.map(([, anchor, , body]) => [anchor, body.match(/>Card (\d)</)[1]]));
+    assert.deepEqual([...byAnchor.entries()].sort(), [['a_b', '2'], ['a_b-2', '5'], ['a_b-3', '1'], ['dup', '3'], ['dup-2', '4'], ['my_finding', '0']]);
+    if (html === single) {
+      const adoption = [...html.matchAll(/Adopted as <a href="#f-([^"]+)">/g)].map(hit => byAnchor.get(hit[1]));
+      assert.deepEqual(adoption, ['0', '1', '2', '3', '4', '5'], 'adoption links reach the card of the same record');
+    }
+  }
 });

@@ -59,6 +59,8 @@ export const REPORT_CONTRAST_PAIRS = Object.freeze([
   ['ok', 'ok-bg', 'confirmed dot inside badge', 3], ['reject', 'reject-bg', 'rejected square inside badge', 3],
   ['focus', 'surface', 'focus ring on card', 3], ['focus', 'bg', 'focus ring on page', 3], ['focus', 'surface-2', 'focus ring on hovered summary', 3],
   ['text', 'bg', 'criterion group rule', 3],
+  ['ok', 'surface-2', 'confirmed bar segment against track', 3], ['pending-mark', 'surface-2', 'needs-review bar segment against track', 3],
+  ['reject', 'surface-2', 'rejected bar segment against track', 3], ['bar-agent', 'surface-2', 'agent-found bar segment against track', 3],
 ]);
 
 const tokenVars = theme => Object.entries(REPORT_TOKENS[theme]).map(([name, value]) => `--${name}:${value}`).join(';');
@@ -86,7 +88,7 @@ code{font-family:var(--mono);font-size:.875em;overflow-wrap:anywhere;word-break:
 h1{font-size:var(--fs-xl)}
 .state{display:inline-flex;align-items:center;gap:var(--s2);font-size:var(--fs-sm);font-weight:600;padding:.125rem var(--s3);border:1px dashed var(--pending-mark);border-radius:999px;color:var(--pending);background:var(--pending-bg)}
 .state-reviewed{border:1px solid var(--ok);color:var(--ok);background:var(--ok-bg)}
-.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,9.5rem),1fr));gap:var(--s3) var(--s4);margin-bottom:var(--s3)}
+.meta{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--s3) var(--s4);margin-bottom:var(--s3)}
 .meta div{min-width:0}.meta .wide{grid-column:1/-1}
 @media (min-width:44rem){.meta{grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s1) var(--s5)}.meta div{display:grid;grid-template-columns:7.5rem minmax(0,1fr);gap:var(--s3);align-items:baseline}.meta dt{font-size:var(--fs-sm);font-weight:500}}
 .meta dt{font-size:var(--fs-xs);color:var(--text-2);font-weight:600}
@@ -216,7 +218,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;padding-right:0
 .colophon{border-top:1px solid var(--border);background:var(--surface);padding:var(--s3) 0 var(--s4);font-size:var(--fs-xs);color:var(--text-2)}
 .colophon p+p{margin-top:var(--s2)}
 .colophon code{color:var(--text)}
-@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important}}
 @media (forced-colors:active){.bar i,.sw,.sc-bar{forced-color-adjust:none}.status::before,.disc summary::before,.box>summary::before{border-color:CanvasText}}
 @media print{:root{${tokenVars('light')}}
 @page{margin:16mm 14mm}
@@ -353,8 +355,21 @@ function untestedScope(model) {
 
 const plural = (count, one, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
 const percent = (part, whole) => `${whole ? Math.round((part / whole) * 10000) / 100 : 0}%`;
-// Card anchors: single-file keeps its sanitized, clipped form; bounded delivery keeps the exact (escaped) ID.
-const findingAnchor = (id, exactId = false) => exactId ? String(id ?? '') : clip(id, 120).replace(/[^\w.:-]/g, '_');
+// Card anchors for one document, in record order. Anchors use only [\w.:-], so IDREF lists and fragment links always resolve.
+// An ID that is already such a token keeps its exact form (single-file clips it to 120 characters first); any other ID is
+// sanitized, and a sanitized, clipped or repeated ID takes the first free numeric suffix, so every anchor is unique.
+function findingAnchors(ids, clipText = clip) {
+  const texts = ids.map(id => clipText(id, 120)), safe = texts.map(text => text.replace(/[^\w.:-]/g, '_'));
+  const used = new Set(), anchors = [];
+  safe.forEach((text, i) => { if (text === texts[i] && !used.has(text)) { used.add(text); anchors[i] = text; } });
+  safe.forEach((text, i) => {
+    if (anchors[i] !== undefined) return;
+    let anchor = text;
+    for (let n = 2; used.has(anchor); n++) anchor = `${text}-${n}`;
+    used.add(anchor); anchors[i] = anchor;
+  });
+  return anchors;
+}
 const scAnchor = id => `sc-${clip(id, 20).replace(/[^\w.-]/g, '_')}`;
 
 const CHECK_LABEL = { 'captured-dom': 'unique in the DOM this run captured', 'full-dom-at-capture': "unique in the page's whole DOM when captured" };
@@ -424,9 +439,9 @@ function findingDisclosures(finding, shots, repeated, pageUrl, clip, exactId) {
   return `<div class="disc">${parts.join('\n')}</div>`;
 }
 
-function renderFinding(finding, images, shown, pageUrl, clipText = clip, exactId = false) {
+function renderFinding(finding, anchor, images, shown, pageUrl, clipText = clip, exactId = false) {
   const clip = clipText;
-  const anchor = findingAnchor(finding.id, exactId), title = clip(finding.title, 300) || clip(finding.id, 120);
+  const title = clip(finding.title, 300) || clip(finding.id, 120);
   // Each PNG is embedded once, under the first finding that cites it, so shared evidence cannot bypass the size caps.
   const cited = [...new Set(finding.evidenceIds)].map(id => images.get(id)).filter(Boolean);
   const shots = cited.filter(shot => !shown.has(shot.evidenceId));
@@ -512,10 +527,12 @@ function renderReportDocument(report, { images = new Map(), imageNotes = [], sel
   const title = model.mode === 'reviewed' ? 'Accessibility audit report (independently reviewed)' : model.mode === 'proposal' ? 'Accessibility audit report (awaiting review)' : 'Accessibility audit report (draft checkpoint)';
   const [stateLabel, stateClass] = { reviewed: ['Independently reviewed', ' state-reviewed'], proposal: ['Awaiting review', ''], checkpoint: ['Draft checkpoint', ''] }[model.mode];
   const std = model.standard ? `WCAG ${esc(clip(model.standard.version, 10))} level ${esc(clip(model.standard.targetLevel, 10))}` : 'WCAG (catalog not recorded)';
+  const anchors = projection ? [] : findingAnchors(shown.map(finding => finding.id));
+  const anchorOf = new Map(shown.map((finding, i) => [finding, anchors[i]]));
   const sections = projection ? [projection.body] : ordered.map(([id, list]) =>
-    renderScGroup(id, catalog.get(id), list.map(finding => renderFinding(finding, images, embedded, model.url)).join('\n'), list.length, clip));
-  // Adoption links only point at cards rendered in this same document.
-  const anchors = projection ? new Map() : new Map(shown.map(finding => [finding.id, `#f-${esc(findingAnchor(finding.id))}`]));
+    renderScGroup(id, catalog.get(id), list.map(finding => renderFinding(finding, anchorOf.get(finding), images, embedded, model.url)).join('\n'), list.length, clip));
+  // Adoption links only point at cards rendered in this same document, indexed by original record position.
+  const hrefs = anchors.map(anchor => `#f-${esc(anchor)}`);
   const created = typeof model.createdAt === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?Z$/.test(model.createdAt)
     ? `<time datetime="${esc(model.createdAt)}">${esc(model.createdAt)}</time>` : esc(clip(model.createdAt ?? 'not recorded', 40));
   const meta = [
@@ -553,7 +570,7 @@ ${toc}
 ${renderSummary(model, ordered, catalog, { shownCount: shown.length, linkGroups: !projection, clip })}
 <section aria-labelledby="findings"><h2 id="findings">${projection ? 'Original finding records' : 'Findings by WCAG success criterion'}</h2>
 ${projection ? '' : '<p class="lede">Each finding is an observation about one recorded target, not a whole-criterion verdict. Open a row for steps, rationale, evidence and what is still missing.</p>\n'}${projection?.navigation ? projection.navigation + '\n' : ''}${sections.join('\n') || '<p>No findings were recorded. That does not mean the page is accessible.</p>'}</section>
-${renderInventory(report, inventory, clip, anchors)}
+${renderInventory(report, inventory, clip, hrefs)}
 ${renderReferences(references, clip)}
 <section aria-labelledby="scope"><h2 id="scope">Untested scope and limits</h2><div class="scope"><ul>${untestedScope(model).map(item => `<li>${esc(item)}</li>`).join('')}</ul>
 ${imageNotes.length ? `<p class="note">${imageNotes.map(esc).join(' ')}</p>` : ''}</div></section>
@@ -570,12 +587,12 @@ export function renderAuditReportHtml(report, context = {}) {
 }
 
 // Inventory observations and adopted findings overlap. Explicit maker links are a separate declaration.
-function renderInventory(report, inventory, clip, anchors = new Map()) {
+function renderInventory(report, inventory, clip, hrefs = []) {
   if (!inventory.length) return '';
   const findings = (report.kind === 'audit-checkpoint-1' ? report.proposal : report)?.findings ?? [];
   const stats = { bound: 0, adopted: 0, linked: 0, unresolved: 0 };
   const rows = inventory.map((row, index) => {
-    const adopted = findings.filter(f => row.bucket === 'violations' && f.source === 'axe' && f.axeCandidateId === `${row.evidenceId}:${row.ruleId}:${row.ruleNodeIndex}`);
+    const adopted = findings.flatMap((f, i) => row.bucket === 'violations' && f.source === 'axe' && f.axeCandidateId === `${row.evidenceId}:${row.ruleId}:${row.ruleNodeIndex}` ? [[f, i]] : []);
     const disposition = row.authorDisposition ?? { status: 'unresolved' };
     if (row.binding?.status === 'bound') stats.bound++;
     if (adopted.length) stats.adopted++;
@@ -583,7 +600,7 @@ function renderInventory(report, inventory, clip, anchors = new Map()) {
     if (disposition.status === 'unresolved') stats.unresolved++;
     const text = value => esc(clip(value));
     const adoption = adopted.length
-      ? `Adopted as ${adopted.map(f => anchors.has(f.id) ? `<a href="${anchors.get(f.id)}">${text(f.id)}</a>` : text(f.id)).join(', ')} (from axeCandidateId)`
+      ? `Adopted as ${adopted.map(([f, i]) => hrefs[i] ? `<a href="${hrefs[i]}">${text(f.id)}</a>` : text(f.id)).join(', ')} (from axeCandidateId)`
       : 'No matching adoption recorded';
     const fields = [
       ['Evidence', text(row.evidenceId)], ['Rule / bucket', text(`${row.ruleId} / ${row.bucket}`)], ['Target', text(row.target)],
@@ -793,12 +810,13 @@ export const BOUNDED_REPORT_LIMITS = Object.freeze({ findings: 50, bytes: 500000
 /** Complete local delivery in original record order; bounds include escaped content, images and chrome. */
 export function renderBoundedAuditReportHtml(report, context = {}) {
   const model = normalizeAuditReport(report), embedded = new Set();
-  const cards = model.findings.map(finding => {
+  const anchors = findingAnchors(model.findings.map(finding => finding.id), fullText);
+  const cards = model.findings.map((finding, i) => {
     const key = `${finding.target.evidenceId}|${finding.target.nodeId}`;
     finding.selector ??= context.selectors?.get(key);
     const local = context.targets?.get(key);
     if (!finding.stableSelector && local?.stableSelector) Object.assign(finding, { stableSelector: local.stableSelector, stableSelectorConfidence: local.stableSelectorConfidence, stableSelectorCheck: local.stableSelectorCheck });
-    return { criterionId: finding.criterionId, html: renderFinding(finding, context.images ?? new Map(), embedded, model.url, fullText, true) };
+    return { criterionId: finding.criterionId, html: renderFinding(finding, anchors[i], context.images ?? new Map(), embedded, model.url, fullText, true) };
   });
   const catalog = new Map(model.coverage.map(row => [row.id, row]));
   // Same card component as the single file; each record keeps its own criterion heading, numbered within the page.

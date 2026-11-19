@@ -18,8 +18,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 11740,
-      "sha256": "1770026bd32a9449192f625b2fe1c07615fe3d0905c3591fbb8e9e08af7f33d4"
+      "bytes": 13594,
+      "sha256": "bf4ef239bfc7b94b457ae5d0a9ef79add52966229e39ff2c758d8add9ada2e4c"
     },
     {
       "path": "THIRD_PARTY_NOTICES.md",
@@ -30,6 +30,11 @@
       "path": "commands/a11y-audit.md",
       "bytes": 2454,
       "sha256": "4e68a9a5bb0a75e64728f5b6586540aa34a421edcd1311a4464bd9605ad7fe1c"
+    },
+    {
+      "path": "docs/assets/sample-report.svg",
+      "bytes": 213378,
+      "sha256": "595549855bfd8ce011afc548dbd5c9463392fb9ed92c20e3a92df246fa3fc610"
     },
     {
       "path": "docs/async-collection.md",
@@ -328,8 +333,8 @@
     },
     {
       "path": "src/cli.js",
-      "bytes": 8921,
-      "sha256": "7ebf713e7985df80f0dedb28393bd305ea4301c6ebecf0ae70aa1631e9b15883"
+      "bytes": 9389,
+      "sha256": "89d9325d0e42432c950c86a7a27dbdc1ef9ea5bcd0bd41cd6eff872112768ba4"
     },
     {
       "path": "src/evidence.js",
@@ -340,6 +345,11 @@
       "path": "src/index.js",
       "bytes": 14384,
       "sha256": "af3cdcac8e4d98c8541e3900fd5162eccb1984e9407e5e0ee9b0379e7aa55754"
+    },
+    {
+      "path": "src/init.js",
+      "bytes": 12640,
+      "sha256": "b9c9a251679cbf79e435266c91252f7f0336af277f23f7aada1bc27793486b72"
     },
     {
       "path": "src/schema.js",
@@ -590,6 +600,11 @@
       "path": "test/helpers.js",
       "bytes": 4038,
       "sha256": "c37c35c0f3fd0331bc701cfa698dfdc08440a358ac21a92a7184565bcd260871"
+    },
+    {
+      "path": "test/init.test.js",
+      "bytes": 12526,
+      "sha256": "225eb5d93e4e9c5d3804808f1755bcfe743aa394a76931def00cddeff1fab865"
     },
     {
       "path": "test/interface.test.js",

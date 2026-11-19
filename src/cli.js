@@ -7,7 +7,16 @@ import { summarizeResult } from './summary.js';
 
 const [command, ...args] = process.argv.slice(2);
 try {
-  if (command === 'serve') {
+  if (command === 'init') {
+    // Human-facing onboarding: plain text on stdout, a plain error line on stderr.
+    const { runInit, InitError } = await import('./init.js');
+    try { process.exitCode = (await runInit(args)).exitCode; }
+    catch (error) {
+      if (!(error instanceof InitError)) throw error;
+      process.stderr.write(`a11y-agent-kit init: ${error.message}\n`);
+      process.exitCode = 1;
+    }
+  } else if (command === 'serve') {
     if (args.length) throw new ToolError('USAGE', 'Usage: a11y-agent-kit serve');
     serve();
   } else if (command === 'audit-inventory') {
@@ -107,7 +116,7 @@ try {
     if (!['analyze', 'verify', 'check'].includes(command) ||
         ![1, 2].includes(args.length) || !args[0].trim() || args[0].startsWith('-') ||
         (args.length === 2 && args[1] !== '--summary')) {
-      throw new ToolError('USAGE', 'Usage: a11y-agent-kit analyze manifest.json [--summary] | verify baseline.json [--summary] | check report.json [--summary] | serve');
+      throw new ToolError('USAGE', 'Usage: a11y-agent-kit init [URL] [--force] [--write] [--install] | analyze manifest.json [--summary] | verify baseline.json [--summary] | check report.json [--summary] | serve');
     }
     let result;
     if (command === 'analyze') result = await analyze(JSON.parse(await fs.readFile(args[0], 'utf8')));

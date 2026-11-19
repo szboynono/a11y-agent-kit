@@ -1,12 +1,41 @@
 # a11y-agent-kit
 
-Audit your running app, or any HTTP(S) site you are authorized to test, with the coding agent you already use. The **Bring Your Own Agent (BYOA)** MVP is available on npm as `a11y-agent-kit@0.1.1`.
+Find accessibility problems in your running web app with the coding agent you already use, and get an HTML report backed by saved screenshots and browser records.
 
-Your agent can open a menu or dialog with Playwright, scan the rendered state with axe, and save browser records and screenshots. It can save a checkpoint before exploring another state. Share an HTML report that marks findings awaiting review and points to the original JSON records and PNGs.
+```sh
+npx -y a11y-agent-kit@0.1.2 init
+```
 
-## Run your first audit from npm
+Then paste this into your agent:
 
-Use Node.js 22.12+ and npm. Start your app. Run the block below in a POSIX shell from your app's project root. It installs matching Playwright Chromium, writes a manifest whose `projectRoot` is the output of `pwd -P`, and runs the npm package to collect evidence. If your app runs at another address, change `url` before the last command.
+```text
+Check my running app at http://127.0.0.1:3000/ for accessibility problems with a11y-agent-kit, using evidence/audit-manifest.json.
+Follow https://github.com/szboynono/a11y-agent-kit/blob/main/skills/a11y-audit/SKILL.md, look at the screenshots before saying anything about how the page looks, and do not change my code.
+When you finish, give me the HTML report, where the evidence is saved, and what you did not check.
+```
+
+![Sample HTML report: three findings awaiting review under WCAG 2.2 SC 4.1.2](docs/assets/sample-report.svg)
+
+The sample report above comes from a small test page in this repository, served on loopback. Findings stay "needs review" until a separate reviewer checks them.
+
+`init` ships in a11y-agent-kit 0.1.2. Until that version is on npm, use the [manual setup with npm 0.1.1](#manual-setup-with-npm-011).
+
+## What `init` does
+
+Run it from your app's project root with Node.js 22.12+ and npm.
+
+- Writes `evidence/audit-manifest.json` with `projectRoot` set to the current directory's real path and `url` set to `http://127.0.0.1:3000/`. Pass another address as the first argument, for example `init http://localhost:5173/`. An existing manifest is left unchanged unless you add `--force`.
+- Checks that the Chromium build matching the kit's Playwright version starts. If it is missing, `init` prints the install command (`npx -y playwright@1.64.1 install chromium`). Add `--install` to download it from the Playwright CDN; nothing is downloaded without it.
+- Prints the MCP server settings for Claude Code (`.mcp.json`), Cursor (`.cursor/mcp.json`) and Codex (`.codex/config.toml`), each running `npx -y a11y-agent-kit@0.1.2 serve`. Add `--write` to create the files that do not exist yet. An existing configuration file is never changed; `init` prints the entry for you to add instead.
+- Prints the prompt above for your agent.
+
+To run one audit without an agent, use `npx -y a11y-agent-kit@0.1.2 audit evidence/audit-manifest.json --summary`.
+
+<a name="run-your-first-audit-from-npm"></a>
+
+## Manual setup with npm 0.1.1
+
+Use this setup until `init` is on npm. Use Node.js 22.12+ and npm. Start your app. Run the block below in a POSIX shell from your app's project root. It installs matching Playwright Chromium, writes a manifest whose `projectRoot` is the output of `pwd -P`, and runs the npm package to collect evidence. If your app runs at another address, change `url` before the last command.
 
 ```sh
 npx -y playwright@1.64.1 install chromium
@@ -22,7 +51,9 @@ npx -y a11y-agent-kit@0.1.1 audit evidence/audit-manifest.json --summary
 
 Open the `reportPath` from the command's JSON output for the local collection. A successful run saves DOM and axe records, screenshots, and a keyboard sample under `evidence/`. Leave the app running for the next step. See the [first-use guide](examples/first-use.md).
 
-## Copy this to your agent
+<a name="copy-this-to-your-agent"></a>
+
+### Agent prompt for npm 0.1.1
 
 Paste this into the coding agent you already use, with the same project and manifest.
 

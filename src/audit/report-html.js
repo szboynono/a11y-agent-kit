@@ -323,7 +323,11 @@ function pageUrls(report) {
   if (!navigation) return { url: declared };
   const final = typeof navigation.finalUrl === 'string' ? navigation.finalUrl : null;
   const redirects = Number.isSafeInteger(navigation.redirects) && navigation.redirects >= 0 ? navigation.redirects : null;
-  return { url: final ?? declared, navigationRecorded: true, finalUrlRecorded: Boolean(final),
+  const dns = navigation.dnsCheck && typeof navigation.dnsCheck === 'object' ? navigation.dnsCheck : null;
+  const count = value => Number.isSafeInteger(value) && value >= 0 ? value : null;
+  const dnsCheck = dns ? { status: typeof dns.status === 'string' ? dns.status : null, lookups: count(dns.lookups), failedLookups: count(dns.failedLookups),
+    privateByResolution: dns.session?.type === 'private' && dns.session?.basis === 'resolution' } : null;
+  return { url: final ?? declared, navigationRecorded: true, finalUrlRecorded: Boolean(final), ...(dnsCheck ? { dnsCheck } : {}),
     ...(declared && (!final || !sameHref(final, declared)) ? { declaredUrl: declared, redirects } : {}) };
 }
 
@@ -349,6 +353,11 @@ function untestedScope(model) {
   if (model.mode === 'checkpoint') items.push('This is a draft checkpoint: nothing here has been submitted or independently reviewed.');
   else if (model.mode === 'proposal') items.push('This proposal has not been independently reviewed: every finding is a claim awaiting review.');
   else items.push('Review is a declaration by the named reviewer; the tool does not verify that they are independent.');
+  if (model.dnsCheck?.status === 'degraded') {
+    const failed = model.dnsCheck.failedLookups, total = model.dnsCheck.lookups;
+    items.push(`DNS check degraded: ${failed === null ? 'some' : failed} of ${total === null ? 'the' : total} main-document DNS lookup${total === 1 ? '' : 's'} failed or timed out. Those navigations were checked against IP literals and localhost names only, so a DNS name that reaches a private address may not have been detected.`);
+  }
+  if (model.dnsCheck?.privateByResolution) items.push('The start URL host name resolved to a non-public address, so the session was treated as private (an internal or staging host): navigation between private addresses was allowed, and cloud metadata addresses stayed blocked.');
   if (model.requiresReReview) items.push(`Review policy ${model.reviewPolicy} is legacy or citation-only. Its previous confirmations need re-review and are displayed as needs review.`);
   return items;
 }

@@ -24,8 +24,9 @@ export async function runAuditAgentCli({ manifest, input = process.stdin, output
   if (signals) for (const [signal, fn] of handlers) process.on(signal, fn);
   try {
     agent = await openAuditAgent(manifest);
+    const dnsCheck = agent.dnsCheck?.() ?? null;
     await emit({ kind: 'audit-agent-session', protocol: 'audit-agent-1', runId: agent.runId, directory: agent.directory,
-      evidencePolicy: agent.evidencePolicy, budget: agent.budget(), operations: ['step', 'read', 'view', 'checkpoint', 'submit', 'inventory'],
+      evidencePolicy: agent.evidencePolicy, budget: agent.budget(), ...(dnsCheck ? { dnsCheck } : {}), operations: ['step', 'read', 'view', 'checkpoint', 'submit', 'inventory'],
       read: { views: ['summary', 'nodes', 'field'], nodeFields: AUDIT_NODE_FIELDS, recordFields: AUDIT_RECORD_FIELDS },
       note: 'Send one operation per JSON line. Save drafts before the deadline; drafts are not final findings. Send {"command":"finish"} or EOF to close without automatic submission.' });
     reader = createInterface({ input, crlfDelay: Infinity, terminal: false });

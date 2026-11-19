@@ -84,7 +84,9 @@ export function registerAuditTools(server, { runtimeProfile, openAgent = openAud
       catch (error) { swept = { success: false, sweep: { version: SWEEP_VERSION, error: errorPayload(error) } }; }
     }
     const progress = swept?.coverage ? swept : first;
+    const dnsCheck = agent.dnsCheck?.() ?? null;
     const response = sweep => ({ success: true, runId: agent.runId, directory: agent.directory, evidencePolicy: agent.evidencePolicy, budget: agent.budget(),
+      ...(dnsCheck ? { dnsCheck } : {}),
       playbook: AUDIT_PLAYBOOK,
       ...(first ? { startup: { ran: 'snapshot + axe', counted: '1 tool call and 2 actions', success: first.success, records: first.records, ...(first.axe ? { axe: first.axe } : {}),
           ...(first.errors?.length ? { errors: first.errors } : {}), ...(first.error ? { error: first.error } : {}),

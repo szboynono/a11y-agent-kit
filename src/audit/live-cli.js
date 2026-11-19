@@ -13,7 +13,8 @@ function summarizedRecord(record) {
 }
 
 /** Local JSONL transport. Returns the complete sealed report. */
-export async function runAuditSessionCli({ manifest, input = process.stdin, output = process.stdout, signals = true, summary = false } = {}) {
+/** `lifecycle` is an in-process option for tests (for example an injected browser); the CLI never sets it. */
+export async function runAuditSessionCli({ manifest, input = process.stdin, output = process.stdout, signals = true, summary = false, lifecycle } = {}) {
   let session, reader, pendingSignal, outputQueue = Promise.resolve();
   const emit = value => {
     outputQueue = outputQueue.then(() => new Promise((resolve, reject) => {
@@ -29,8 +30,9 @@ export async function runAuditSessionCli({ manifest, input = process.stdin, outp
   const handlers = new Map(['SIGINT', 'SIGTERM'].map(signal => [signal, () => onSignal(signal)]));
   if (signals) for (const [signal, handler] of handlers) process.on(signal, handler);
   try {
-    session = await openAuditSession(manifest);
-    await emit({ type: 'session', status: session.status, sealed: false, session: { runId: session.runId, directory: session.directory, manifest: session.manifest, startedAt: session.startedAt, deadlineAt: session.deadlineAt } });
+    session = await openAuditSession(manifest, lifecycle);
+    const dnsCheck = session.dnsCheck;
+    await emit({ type: 'session', status: session.status, sealed: false, session: { runId: session.runId, directory: session.directory, manifest: session.manifest, startedAt: session.startedAt, deadlineAt: session.deadlineAt }, ...(dnsCheck ? { dnsCheck } : {}) });
     reader = createInterface({ input, crlfDelay: Infinity, terminal: false });
     void session.finished.then(stopReading, stopReading);
     if (pendingSignal) { void session.finish({ reason: 'interrupted', signal: pendingSignal }).catch(() => {}); stopReading(); }
@@ -51,8 +53,9 @@ export async function runAuditSessionCli({ manifest, input = process.stdin, outp
         break;
       }
       try {
-        const record = await session.perform(value);
-        await emit({ type: 'record', sealed: false, record: summary ? summarizedRecord(record) : record });
+        const record = await session.perform(value), dns = session.dnsCheck;
+        // A degraded DNS check is repeated on each record line, so a reader of any line sees that detection was reduced.
+        await emit({ type: 'record', sealed: false, record: summary ? summarizedRecord(record) : record, ...(dns?.status === 'degraded' ? { dnsCheck: dns } : {}) });
       } catch (error) {
         await emit({ type: 'error', sealed: false, error: errorRecord(error, 'audit-live-command') });
       }

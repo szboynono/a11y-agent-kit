@@ -293,13 +293,19 @@ export async function openAuditAgent(input, injected = {}) {
     return { ...payload, targets: { note: STABLE_SELECTOR_NOTE, rows: kept, ...(kept.length < rows.length ? { omitted: rows.length - kept.length } : {}) } };
   }
 
+  /** A degraded DNS check is repeated in every response, so the agent sees that detection was reduced. */
+  function degradedDns() {
+    const dnsCheck = session.dnsCheck;
+    return dnsCheck?.status === 'degraded' ? { dnsCheck } : {};
+  }
+
   function envelope(tool, payload, findings) {
     const next = tool === 'submit' && payload.delivery?.submission === 'submitted' ? undefined : nextHint();
     const more = payload.pagination?.next && !payload.pagination.more ? 'more available: read the same evidenceId with options = pagination.next' : null;
     return boundAuditResponse({ kind: 'audit-agent-result', protocol: 'audit-agent-1', tool, runId: session.runId,
       evidencePolicy: AUDIT_EVIDENCE_POLICY, sealed: session.status === 'sealed', budget: budgetView(), ...(next ? { next } : {}),
       delivery: { checkpoint: latestCheckpoint ? 'saved' : 'none', submission: phase === 'submitted' ? 'submitted' : 'unsubmitted' }, ...(more ? { more } : {}),
-      ...progressFor(tool, findings, payload.success === true), ...payload }, textLimit);
+      ...progressFor(tool, findings, payload.success === true), ...degradedDns(), ...payload }, textLimit);
   }
 
   async function dispatch(raw, sequence, reserveBytes = 0) {
@@ -594,7 +600,7 @@ export async function openAuditAgent(input, injected = {}) {
   timer = deps.setTimer(() => { void close({ reason: 'wall_budget_exhausted' }).catch(() => {}); }, Math.max(1, deadline - deps.now()));
   timer?.unref?.();
   return Object.freeze({ runId: session.runId, directory: session.directory, evidencePolicy: AUDIT_EVIDENCE_POLICY,
-    request, startupSweep, close, finished, budget: budgetView, get status() { return phase; } });
+    request, startupSweep, close, finished, budget: budgetView, dnsCheck: () => session.dnsCheck ?? null, get status() { return phase; } });
 }
 
 /** Recovery is explicit and keeps the source draft and original collection. */

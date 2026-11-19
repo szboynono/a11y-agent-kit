@@ -1,20 +1,29 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import * as fs from 'node:fs/promises';
 import http from 'node:http';
+import os from 'node:os';
+import path from 'node:path';
+import { PassThrough } from 'node:stream';
+import { openAuditAgent } from '../src/audit/agent.js';
+import { registerAuditTools } from '../src/audit/mcp.js';
+import { runAuditSessionCli } from '../src/audit/live-cli.js';
+import { submitAudit } from '../src/audit/review.js';
+import { renderAuditReportHtml, writeAuditReport } from '../src/audit/report-html.js';
 import { AuditBrowser } from '../src/audit/browser.js';
 import { parseAuditManifest } from '../src/audit/schema.js';
 import { errorPayload } from '../src/audit/error-details.js';
 import { errorRecord } from '../src/evidence.js';
 import {
-  boundNavigationDetails, classifyAddress, CLOUD_METADATA_ADDRESSES, decideNavigation, FLOOR_REASONS, isPrivateHost,
-  navigationBlockDetails, navigationPolicy, resolutionHost, resolveNavigationTarget, systemHostResolver,
+  boundNavigationDetails, classifyAddress, CLOUD_METADATA_ADDRESSES, decideNavigation, DNS_LOOKUP_TIMEOUT_MS, FLOOR_REASONS, isCloudMetadataHost, isPrivateHost,
+  navigationBlockDetails, navigationPolicy, resolutionHost, resolveNavigationTarget, startSession, systemHostResolver,
 } from '../src/audit/navigation.js';
 import { externalProbe } from './helpers.js';
 
 // Loopback fixtures only, and no real DNS: Chromium maps the *.example names below to 127.0.0.1 with
 // --host-resolver-rules, while the DNS check runs against an injected resolver that answers from a table.
 const page = title => `<!doctype html><html lang="en"><head><title>${title}</title></head><body><main><h1>${title}</h1></main></body></html>`;
-const MAPPED = ['public-site.example', 'internal.example', 'rebind.example', 'meta.example', 'nxdomain.example'];
+const MAPPED = ['public-site.example', 'internal.example', 'rebind.example', 'meta.example', 'nxdomain.example', 'staging.example', 'slow.example'];
 const launchArgs = [`--host-resolver-rules=${MAPPED.map(host => `MAP ${host} 127.0.0.1`).join(', ')}`];
 
 /** An injected resolver: `table[host]` is an address list, or an Error to throw. Every call is recorded. */
@@ -113,37 +122,51 @@ test('DNS guard: a name is denied when any resolved address is not public, not o
   assert.equal((await resolve(['not-an-ip'])).reason, 'private_network_target', 'an unparseable answer is never treated as public');
 });
 
-test('DNS guard: lookup failure, timeout and empty answers fail closed with a structured, non-overridable reason', async () => {
-  const outcome = lookup => resolveNavigationTarget({ url: 'https://public-site.example/a', policy: publicPolicy, resolver: { name: 'fixed', lookup } });
+test('DNS guard: lookup failure, timeout and empty answers degrade with a structured error instead of blocking', async () => {
+  const outcome = (lookup, policy = publicPolicy) => resolveNavigationTarget({ url: 'https://public-site.example/a', policy, resolver: { name: 'fixed', lookup } });
   for (const code of ['ENOTFOUND', 'EAI_AGAIN', 'ETIMEOUT', 'ESERVFAIL']) {
     const result = await outcome(async () => { throw dnsError(code); });
-    assert.deepEqual(result, { allowed: false, reason: 'target_resolution_failed', overridable: false, resolution: { host: 'public-site.example', resolver: 'fixed', addresses: [], error: code } }, code);
+    assert.deepEqual(result, { allowed: true, degraded: true, resolution: { host: 'public-site.example', resolver: 'fixed', addresses: [], error: code } }, code);
   }
   assert.equal((await outcome(() => { throw new Error('synchronous failure'); })).resolution.error, 'LOOKUP_FAILED', 'a synchronous throw without a code');
   assert.equal((await outcome(async () => [])).resolution.error, 'NO_ADDRESSES');
   assert.equal((await outcome(async () => null)).resolution.error, 'NO_ADDRESSES');
-  assert.ok(FLOOR_REASONS.includes('target_resolution_failed'));
-  const details = navigationBlockDetails({ ...(await outcome(async () => { throw dnsError('ETIMEOUT'); })), fromUrl: null, blockedUrl: 'https://public-site.example/a',
-    chain: [{ url: 'https://public-site.example/a', status: null, blocked: true }], policy: publicPolicy, sessionOrigins: new Set([publicPolicy.manifestOrigin]), stage: 'audit-browser-start', initial: true });
-  assert.equal(details.suggestedAction.kind, 'stop'); assert.match(details.suggestedAction.note, /could not be resolved/);
+  assert.equal((await outcome(async () => { throw dnsError('ENOTFOUND'); }, privatePolicy)).degraded, true, 'a private session degrades the same way');
+  assert.ok(!FLOOR_REASONS.includes('target_resolution_failed'), 'a failed lookup is no longer a blocking reason');
+  // A lookup that never answers is cut off at the bound, and its timer does not keep the process alive.
+  const started = performance.now();
+  const hung = await resolveNavigationTarget({ url: 'https://public-site.example/a', policy: publicPolicy, resolver: { name: 'hung', lookup: () => new Promise(() => {}) }, timeoutMs: 50 });
+  assert.deepEqual(hung, { allowed: true, degraded: true, resolution: { host: 'public-site.example', resolver: 'hung', addresses: [], error: 'LOOKUP_TIMEOUT' } });
+  assert.ok(performance.now() - started < 1000, 'bounded by timeoutMs');
+  assert.ok(DNS_LOOKUP_TIMEOUT_MS >= 1000 && DNS_LOOKUP_TIMEOUT_MS <= 3000, 'the default bound is between 1 and 3 seconds');
+  // A late answer after the bound is ignored rather than changing the decision.
+  let release;
+  const late = resolveNavigationTarget({ url: 'https://public-site.example/a', policy: publicPolicy, resolver: { name: 'late', lookup: () => new Promise(resolve => { release = resolve; }) }, timeoutMs: 20 });
+  assert.equal((await late).resolution.error, 'LOOKUP_TIMEOUT'); release(['10.0.0.1']);
 });
 
-test('DNS guard: literals, localhost names, private sessions and non-http URLs are not resolved; literal decisions are unchanged', async () => {
+test('DNS guard: literals, localhost names and non-http URLs are not resolved; a private session resolves names only for the metadata floor', async () => {
   for (const url of ['http://10.0.0.1/', 'http://8.8.8.8/', 'http://[::1]/', 'http://[2606:4700::1]/', 'http://localhost/', 'http://app.localhost/', 'http://localhost./', 'ftp://public-site.example/', 'not a url']) {
     assert.equal(resolutionHost(url, publicPolicy), null, url);
   }
   assert.equal(resolutionHost('https://www.public-site.example/', publicPolicy), 'www.public-site.example');
-  assert.equal(resolutionHost('https://public-site.example/', privatePolicy), null, 'a loopback session never resolves');
+  assert.equal(resolutionHost('https://public-site.example/', privatePolicy), 'public-site.example', 'a private session also resolves DNS names');
   let calls = 0;
-  const counting = { name: 'count', lookup: async () => { calls++; return ['10.0.0.1']; } };
-  assert.deepEqual(await resolveNavigationTarget({ url: 'http://8.8.8.8/', policy: publicPolicy, resolver: counting }), { allowed: true });
-  assert.deepEqual(await resolveNavigationTarget({ url: 'http://internal.example/', policy: privatePolicy, resolver: counting }), { allowed: true });
-  assert.equal(calls, 0);
-  // isPrivateHost and the synchronous decision still see only literals and localhost names.
+  const answering = addresses => ({ name: 'count', lookup: async () => { calls++; return addresses; } });
+  assert.deepEqual(await resolveNavigationTarget({ url: 'http://8.8.8.8/', policy: publicPolicy, resolver: answering(['10.0.0.1']) }), { allowed: true });
+  assert.equal(calls, 0, 'literals are never resolved');
+  const privateToPrivate = await resolveNavigationTarget({ url: 'http://internal.example/', policy: privatePolicy, resolver: answering(['10.0.0.1']) });
+  assert.equal(privateToPrivate.allowed, true, 'private to private is allowed'); assert.equal(privateToPrivate.resolution.addresses[0].category, 'private');
+  const privateToMetadata = await resolveNavigationTarget({ url: 'http://internal.example/', policy: privatePolicy, resolver: answering(['10.0.0.1', '169.254.169.254']) });
+  assert.deepEqual([privateToMetadata.allowed, privateToMetadata.reason, privateToMetadata.overridable, privateToMetadata.resolution.cloudMetadata], [false, 'private_network_target', false, true], 'metadata is blocked in a private session');
+  assert.equal(calls, 2);
+  // isPrivateHost and the synchronous decision see only literals and localhost names; metadata literals are a floor in every session.
   assert.equal(isPrivateHost('internal.example'), false);
-  const origins = new Set(['https://public-site.example', 'https://internal.example']);
+  const origins = new Set(['https://public-site.example', 'https://internal.example', 'http://169.254.169.254', 'http://10.0.0.1']);
   assert.deepEqual(decideNavigation({ url: 'https://internal.example/', policy: { ...publicPolicy, allowedOrigins: ['https://internal.example'] }, sessionOrigins: origins }), { allowed: true });
   assert.equal(decideNavigation({ url: 'http://169.254.169.254/', policy: publicPolicy, sessionOrigins: origins }).reason, 'private_network_target');
+  assert.deepEqual(decideNavigation({ url: 'http://169.254.169.254/', policy: privatePolicy, sessionOrigins: origins }), { allowed: false, reason: 'private_network_target', overridable: false }, 'declared metadata literal in a private session');
+  assert.deepEqual(decideNavigation({ url: 'http://10.0.0.1/', policy: privatePolicy, sessionOrigins: origins }), { allowed: true }, 'declared private literal in a private session');
   assert.equal(systemHostResolver.name, 'system'); assert.equal(typeof systemHostResolver.lookup, 'function');
   assert.equal(new AuditBrowser(parseAuditManifest({ projectRoot: '/tmp', url: 'https://public-site.example/' })).hostResolver, systemHostResolver, 'the default resolver');
 });
@@ -169,34 +192,44 @@ test('DNS guard: the resolution record is bounded in block details and in agent/
 // ---------- Browser integration (loopback fixture, injected resolver) ----------
 
 test('DNS guard start: a public start URL whose name resolves to a private address is never contacted', async t => {
+  // The private address here is a cloud metadata endpoint (link-local): the one start answer that is still refused.
+  // A start name that resolves to any other non-public address opens a private session instead (see the B1 tests below).
   const fixture = await site(t);
-  const { resolver, calls } = tableResolver({ 'public-site.example': ['8.8.8.8', '10.0.0.5'] });
+  const { resolver, calls } = tableResolver({ 'public-site.example': ['8.8.8.8', '169.254.169.254'] });
   const { browser, error } = await startBlocked({ projectRoot: '/tmp', url: `${fixture.origin('public-site.example')}/` }, { hostResolver: resolver });
   assert.equal(fixture.hits.length, 0, 'the request was failed before it was sent');
   assert.deepEqual(calls, ['public-site.example']);
   assert.equal(errorRecord(error).code, 'RUNTIME_ERROR', '0.1.1 code for a blocked start');
   assert.equal(error.navigation.reason, 'private_network_target'); assert.equal(error.navigation.overridable, false);
   assert.equal(error.navigation.suggestedAction.kind, 'stop'); assert.equal(error.navigation.stage, 'audit-browser-start');
+  assert.doesNotMatch(error.navigation.suggestedAction.note, /redirect/, 'the note does not describe a redirect that did not happen');
   assert.deepEqual(error.navigation.resolution, { host: 'public-site.example', resolver: 'test-table', addresses: [
-    { address: '8.8.8.8', family: 4, category: 'public', blocked: false }, { address: '10.0.0.5', family: 4, category: 'private', blocked: true }] });
+    { address: '8.8.8.8', family: 4, category: 'public', blocked: false }, { address: '169.254.169.254', family: 4, category: 'link_local', cloudMetadata: true, blocked: true }], cloudMetadata: true });
   assert.deepEqual(browser.blocked, [{ reason: 'navigation_outside_origin', url: `${fixture.origin('public-site.example')}/` }], '0.1.1 event shape');
 });
 
-test('DNS guard start: a lookup failure blocks the start with target_resolution_failed; a public answer opens it', async t => {
+test('DNS guard start: a lookup failure degrades the start instead of blocking it; a public answer opens it', async t => {
   const fixture = await site(t);
   for (const failure of [dnsError('ENOTFOUND'), dnsError('ETIMEOUT')]) {
     const { resolver } = tableResolver({ 'nxdomain.example': failure });
-    const { error } = await startBlocked({ projectRoot: '/tmp', url: `${fixture.origin('nxdomain.example')}/` }, { hostResolver: resolver });
-    assert.equal(error.navigation.reason, 'target_resolution_failed'); assert.equal(error.navigation.overridable, false);
-    assert.equal(error.navigation.resolution.error, failure.code); assert.deepEqual(error.navigation.resolution.addresses, []);
+    const browser = new AuditBrowser(parseAuditManifest({ projectRoot: '/tmp', url: `${fixture.origin('nxdomain.example')}/` }), { launchArgs, hostResolver: resolver });
+    t.after(() => browser.close());
+    await browser.start();
+    const { dnsCheck } = browser.navigationReport();
+    assert.equal(dnsCheck.status, 'degraded'); assert.deepEqual(dnsCheck.session, { type: 'public', basis: 'literal_fallback',
+      resolution: { host: 'nxdomain.example', resolver: 'test-table', addresses: [], error: failure.code } });
+    assert.deepEqual(dnsCheck.failures, [{ stage: 'audit-browser-start', host: 'nxdomain.example', error: failure.code }]);
+    assert.equal(browser.navigationPolicy.publicSession, true, 'the literal classification stands');
+    await browser.close();
   }
-  assert.equal(fixture.count('nxdomain.example'), 0);
+  assert.equal(fixture.count('nxdomain.example'), 2, 'each degraded start was sent');
   const { resolver, calls } = tableResolver({ 'public-site.example': ['8.8.8.8', '2606:4700::1'] });
   const browser = new AuditBrowser(parseAuditManifest({ projectRoot: '/tmp', url: `${fixture.origin('public-site.example')}/` }), { launchArgs, hostResolver: resolver });
   t.after(() => browser.close());
   await browser.start();
   assert.equal(fixture.count('public-site.example'), 1); assert.deepEqual(calls, ['public-site.example']);
   assert.equal(browser.navigationReport().finalUrl, `${fixture.origin('public-site.example')}/`);
+  assert.deepEqual([browser.navigationReport().dnsCheck.status, browser.navigationReport().dnsCheck.session.type, browser.navigationReport().dnsCheck.session.basis], ['checked', 'public', 'resolution']);
 });
 
 test('DNS guard redirects: every hop is resolved, and a hop into a private address is blocked before it is sent', async t => {
@@ -289,4 +322,189 @@ test('DNS guard: a script navigation during an action is checked, and a slow ans
   assert.equal(details.reason, 'private_network_target'); assert.equal(details.stage, 'scroll'); assert.equal(details.overridable, false);
   assert.deepEqual(details.resolution.addresses.map(item => item.blocked), [false, true]);
   assert.equal(fixture.count('internal.example'), 0);
+});
+
+// ---------- Shared classification for IP literals and DNS answers ----------
+
+test('DNS guard: IP literals and DNS answers share one classification, including embedded IPv4 forms', async () => {
+  // [address, not public, cloud metadata, category]
+  const table = [
+    ['8.8.8.8', false, false, 'public'], ['2606:4700::1', false, false, 'public'],
+    ['198.18.0.1', false, false, 'public'], ['198.19.255.254', false, false, 'public'],
+    ['64:ff9b::a9fe:a9fe', true, true, 'link_local'], ['64:ff9b::10.0.0.1', true, false, 'private'], ['64:ff9b::', true, false, 'unspecified'],
+    ['64:ff9b::808:808', false, false, 'public'], ['64:ff9b:1::a00:1', true, false, 'private'],
+    ['fec0::1', true, false, 'site_local'], ['224.0.0.1', true, false, 'multicast'], ['239.255.255.250', true, false, 'multicast'], ['ff02::1', true, false, 'multicast'],
+    ['255.255.255.255', true, false, 'reserved'],
+    ['2002:7f00:1::1', true, false, 'loopback'], ['2002:a9fe:a9fe::1', true, true, 'link_local'], ['2002:808:808::1', false, false, 'public'],
+    ['2001:0:4136:e378::f7f7:f7f7', false, false, 'public'], ['2001:0:4136:e378::80ff:fffe', true, false, 'loopback'], ['2001:0:a9fe:a9fe::f7f7:f7f7', true, true, 'link_local'],
+    ['::ffff:127.0.0.1', true, false, 'loopback'], ['::ffff:0:7f00:1', true, false, 'loopback'], ['::ffff:169.254.169.254', true, true, 'link_local'],
+    ['fd00:ec2::254', true, true, 'unique_local'], ['169.254.170.2', true, true, 'link_local'], ['100.100.100.200', true, true, 'shared_address_space'],
+    ['10.0.0.1', true, false, 'private'], ['127.0.0.1', true, false, 'loopback'],
+  ];
+  for (const [address, nonPublic, metadata, category] of table) {
+    const literal = address.includes(':') ? `[${address}]` : address, url = `http://${literal}/`;
+    const classified = classifyAddress(address);
+    assert.deepEqual([classified.category, classified.blocked, classified.cloudMetadata === true], [category, nonPublic, metadata], address);
+    assert.equal(isPrivateHost(literal), nonPublic, `literal ${address}`); assert.equal(isCloudMetadataHost(literal), metadata, `literal ${address}`);
+    // Declared origins do not change the floor: a non-public literal is never a cross-origin (overridable) block.
+    const origins = new Set([publicPolicy.manifestOrigin, new URL(url).origin]);
+    assert.deepEqual(decideNavigation({ url, policy: publicPolicy, sessionOrigins: origins }), nonPublic ? { allowed: false, reason: 'private_network_target', overridable: false } : { allowed: true }, `public session literal ${address}`);
+    assert.deepEqual(decideNavigation({ url, policy: privatePolicy, sessionOrigins: origins }), metadata ? { allowed: false, reason: 'private_network_target', overridable: false } : { allowed: true }, `private session literal ${address}`);
+    const answer = { name: 'fixed', lookup: async () => [address] };
+    const viaPublic = await resolveNavigationTarget({ url: 'https://public-site.example/', policy: publicPolicy, resolver: answer });
+    const viaPrivate = await resolveNavigationTarget({ url: 'https://public-site.example/', policy: privatePolicy, resolver: answer });
+    assert.equal(viaPublic.allowed, !nonPublic, `public session answer ${address}`); assert.equal(viaPrivate.allowed, !metadata, `private session answer ${address}`);
+    if (!viaPublic.allowed) assert.deepEqual([viaPublic.reason, viaPublic.overridable], ['private_network_target', false]);
+  }
+});
+
+// ---------- B1: the start URL's own answer decides the session type ----------
+
+test('DNS guard B1: startSession turns a non-public start answer into a private session and keeps refusing metadata', () => {
+  const resolution = addresses => ({ host: 'staging.example', resolver: 'r', addresses: addresses.map(classifyAddress) });
+  const privateAnswer = startSession({ allowed: false, reason: 'private_network_target', overridable: false, resolution: resolution(['10.20.0.5']) }, publicPolicy);
+  assert.deepEqual(privateAnswer.decision, { allowed: true, resolution: resolution(['10.20.0.5']) });
+  assert.deepEqual([privateAnswer.session.type, privateAnswer.session.basis], ['private', 'resolution']);
+  const publicAnswer = startSession({ allowed: true, resolution: resolution(['8.8.8.8']) }, publicPolicy);
+  assert.deepEqual([publicAnswer.decision.allowed, publicAnswer.session.type, publicAnswer.session.basis], [true, 'public', 'resolution']);
+  const metadata = { allowed: false, reason: 'private_network_target', overridable: false, resolution: { ...resolution(['10.0.0.1', '169.254.169.254']), cloudMetadata: true } };
+  assert.equal(startSession(metadata, publicPolicy).decision, metadata, 'a metadata answer stays refused');
+  const failed = { allowed: true, degraded: true, resolution: { host: 'staging.example', resolver: 'r', addresses: [], error: 'ENOTFOUND' } };
+  assert.deepEqual(startSession(failed, publicPolicy).session, { type: 'public', basis: 'literal_fallback', resolution: failed.resolution });
+  assert.deepEqual(startSession({ allowed: true }, privatePolicy).session, { type: 'private', basis: 'literal' });
+});
+
+test('DNS guard B1: a start name resolving to a private address opens a private session; private targets are allowed and metadata stays blocked', async t => {
+  const fixture = await site(t, (host, url, port) => host === 'staging.example' && url === '/'
+    ? { body: page('staging').replace('</main>', `<a id="meta" href="http://meta.example:${port}/">Meta</a></main>`) } : {});
+  const staging = fixture.origin('staging.example'), internal = fixture.origin('internal.example'), meta = fixture.origin('meta.example'), loopback = fixture.origin('127.0.0.1');
+  const { resolver, calls } = tableResolver({ 'staging.example': ['10.20.0.5'], 'internal.example': ['192.168.1.9'], 'meta.example': ['10.0.0.9', '169.254.169.254'] });
+  const browser = new AuditBrowser(parseAuditManifest({ projectRoot: '/tmp', url: `${staging}/`, allowedOrigins: [internal, loopback, meta, 'http://169.254.169.254'] }), { launchArgs, hostResolver: resolver });
+  t.after(() => browser.close());
+  await browser.start();
+  assert.equal(fixture.count('staging.example'), 1, 'the start was not refused');
+  const { dnsCheck } = browser.navigationReport();
+  assert.deepEqual(dnsCheck.session, { type: 'private', basis: 'resolution', resolution: { host: 'staging.example', resolver: 'test-table',
+    addresses: [{ address: '10.20.0.5', family: 4, category: 'private', blocked: true }] } });
+  assert.equal(browser.navigationPolicy.publicSession, false);
+
+  assert.equal((await browser.execute({ action: 'navigate', path: `${internal}/` })).success, true, 'private name to private name');
+  assert.equal((await browser.execute({ action: 'navigate', path: `${loopback}/` })).success, true, 'private name to a private literal');
+  assert.equal(fixture.count('internal.example'), 1);
+
+  const metaName = await browser.execute({ action: 'navigate', path: `${meta}/` });
+  assert.equal(metaName.error.code, 'UNSAFE_AUDIT_NAVIGATION'); assert.equal(metaName.error.navigation.reason, 'private_network_target');
+  assert.equal(metaName.error.navigation.overridable, false); assert.equal(metaName.error.navigation.resolution.cloudMetadata, true);
+  const metaLiteral = await browser.execute({ action: 'navigate', path: 'http://169.254.169.254/' });
+  assert.equal(metaLiteral.error.code, 'UNSAFE_AUDIT_NAVIGATION'); assert.equal(metaLiteral.error.navigation.reason, 'private_network_target');
+  assert.equal(metaLiteral.error.navigation.resolution, undefined, 'a literal needs no lookup');
+
+  await browser.execute({ action: 'navigate', path: `${staging}/` });
+  const clicked = await browser.execute({ action: 'click', selector: '#meta' });
+  assert.equal(clicked.error.code, 'AUDIT_BROWSER_ACTION_BLOCKED'); assert.equal(clicked.error.navigation.reason, 'private_network_target');
+  assert.equal(fixture.count('meta.example'), 0, 'the metadata-resolving name was never contacted');
+  assert.equal(browser.navigationReport().dnsCheck.status, 'checked');
+  assert.ok(calls.filter(host => host === 'meta.example').length >= 2);
+});
+
+test('DNS guard B1: a public start keeps the public-to-private floor for names and literals', async t => {
+  const fixture = await site(t);
+  const pub = fixture.origin('public-site.example'), staging = fixture.origin('staging.example'), loopback = fixture.origin('127.0.0.1');
+  const { resolver } = tableResolver({ 'public-site.example': ['8.8.8.8'], 'staging.example': ['10.20.0.5'] });
+  const browser = new AuditBrowser(parseAuditManifest({ projectRoot: '/tmp', url: `${pub}/`, allowedOrigins: [staging, loopback] }), { launchArgs, hostResolver: resolver });
+  t.after(() => browser.close());
+  await browser.start();
+  assert.deepEqual([browser.navigationReport().dnsCheck.session.type, browser.navigationReport().dnsCheck.session.basis], ['public', 'resolution']);
+  for (const target of [staging, loopback]) {
+    const navigated = await browser.execute({ action: 'navigate', path: `${target}/` });
+    assert.equal(navigated.error.code, 'UNSAFE_AUDIT_NAVIGATION', target); assert.equal(navigated.error.navigation.reason, 'private_network_target', target);
+  }
+  assert.equal(fixture.count('staging.example') + fixture.count('127.0.0.1'), 0);
+});
+
+// ---------- M1: a failed or slow lookup degrades instead of blocking, within a bound ----------
+
+test('DNS guard M1: a lookup that never answers degrades start, navigate and click within a bounded time', async t => {
+  const fixture = await site(t, (host, url, port) => host === 'slow.example'
+    ? { body: page(`slow${url}`).replace('</main>', `<a id="next" href="http://slow.example:${port}/next">Next</a></main>`) } : {});
+  const slow = fixture.origin('slow.example'), loopback = fixture.origin('127.0.0.1');
+  const calls = [];
+  const resolver = { name: 'hung', lookup: host => { calls.push({ host, at: performance.now() }); return new Promise(() => {}); } };
+  const browser = new AuditBrowser(parseAuditManifest({ projectRoot: '/tmp', url: `${slow}/`, allowedOrigins: [loopback] }), { launchArgs, hostResolver: resolver });
+  t.after(() => browser.close());
+  await browser.start();
+  const bound = DNS_LOOKUP_TIMEOUT_MS + 3000;
+  assert.ok(performance.now() - calls[0].at < bound, 'the start continued after the lookup bound');
+  assert.equal(fixture.count('slow.example'), 1);
+
+  let started = performance.now();
+  const navigated = await browser.execute({ action: 'navigate', path: '/other' }, 4000);
+  assert.equal(navigated.success, true, JSON.stringify(navigated.error)); assert.ok(performance.now() - started < bound, 'navigate is bounded');
+  assert.equal(calls.length, 2, 'navigate resolves once: the request reuses the preflight answer');
+  started = performance.now();
+  const clicked = await browser.execute({ action: 'click', selector: '#next' }, 4000);
+  assert.equal(clicked.success, true, JSON.stringify(clicked.error)); assert.ok(performance.now() - started < bound, 'click is bounded');
+  assert.equal(fixture.count('slow.example'), 3);
+
+  // The session stays public by its literal, so the public-to-private floor still applies to a declared private literal.
+  const floor = await browser.execute({ action: 'navigate', path: `${loopback}/` });
+  assert.equal(floor.error.navigation.reason, 'private_network_target');
+  const { dnsCheck } = browser.navigationReport();
+  assert.equal(dnsCheck.status, 'degraded'); assert.equal(dnsCheck.failedLookups, 3); assert.equal(dnsCheck.lookups, 3);
+  assert.deepEqual(dnsCheck.failures.map(item => [item.stage, item.error]), [['audit-browser-start', 'LOOKUP_TIMEOUT'], ['navigate', 'LOOKUP_TIMEOUT'], ['click', 'LOOKUP_TIMEOUT']]);
+  assert.deepEqual([dnsCheck.session.type, dnsCheck.session.basis, dnsCheck.session.resolution.error], ['public', 'literal_fallback', 'LOOKUP_TIMEOUT']);
+  assert.match(dnsCheck.note, /may not have been detected/);
+});
+
+async function workspace(t) {
+  const directory = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'a11y-dns-guard-')));
+  await fs.mkdir(path.join(directory, 'evidence'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  return directory;
+}
+const failingResolver = { name: 'test-offline', lookup: async () => { throw dnsError('ENOTFOUND'); } };
+const injectedBrowser = (hostResolver = failingResolver) => manifest => new AuditBrowser(manifest, { handleSignals: false, launchArgs, hostResolver });
+
+test('DNS guard M1 JSONL and HTML: a degraded check is on the session line, each record line, the sealed report and the HTML limits', async t => {
+  const fixture = await site(t), projectRoot = await workspace(t);
+  const input = new PassThrough(), output = new PassThrough(), lines = [];
+  output.on('data', chunk => lines.push(...String(chunk).split('\n').filter(Boolean).map(line => JSON.parse(line))));
+  input.end('{"action":"snapshot"}\n{"command":"finish"}\n');
+  const report = await runAuditSessionCli({ manifest: { projectRoot, url: `${fixture.origin('nxdomain.example')}/`, wallSeconds: 60 }, input, output, signals: false,
+    lifecycle: { createBrowser: injectedBrowser() } });
+  const [session, record, finished] = lines;
+  assert.equal(session.type, 'session'); assert.equal(session.dnsCheck.status, 'degraded');
+  assert.deepEqual(session.dnsCheck.session.resolution, { host: 'nxdomain.example', resolver: 'test-offline', addresses: [], error: 'ENOTFOUND' });
+  assert.match(session.dnsCheck.note, /may not have been detected/);
+  assert.equal(record.type, 'record'); assert.equal(record.record.success, true); assert.equal(record.dnsCheck.status, 'degraded');
+  assert.equal(finished.type, 'finished'); assert.equal(finished.report.navigation.dnsCheck.status, 'degraded');
+  assert.deepEqual(report.navigation.dnsCheck.failures, [{ stage: 'audit-browser-start', host: 'nxdomain.example', error: 'ENOTFOUND' }]);
+  const proposal = await submitAudit(report.reportPath, { auditor: { name: 'Agent' }, findings: [] });
+  assert.deepEqual(proposal.navigation.dnsCheck, report.navigation.dnsCheck);
+  const out = path.join(projectRoot, 'evidence', 'report.html');
+  await writeAuditReport(proposal.reportPath, out);
+  const html = await fs.readFile(out, 'utf8'), scope = html.slice(html.indexOf('id="scope"'));
+  assert.match(scope, /DNS check degraded: 1 of 1 main-document DNS lookup failed or timed out\. Those navigations were checked against IP literals and localhost names only/);
+});
+
+test('DNS guard HTML: the limits list names a degraded check and a private session decided by DNS, and nothing otherwise', () => {
+  const base = { kind: 'audit-proposal', runId: 'r', findings: [], coverage: [], standard: { version: '2.2', targetLevel: 'AA' }, auditor: { name: 'A' }, manifest: { url: 'http://staging.example/' } };
+  const render = dnsCheck => { const html = renderAuditReportHtml({ ...base, navigation: { finalUrl: 'http://staging.example/', redirects: 0, dnsCheck } }); return html.slice(html.indexOf('id="scope"')); };
+  const checked = render({ status: 'checked', session: { type: 'public', basis: 'resolution' }, lookups: 2, failedLookups: 0 });
+  assert.doesNotMatch(checked, /DNS check degraded|treated as private/);
+  assert.match(render({ status: 'degraded', session: { type: 'public', basis: 'literal_fallback' }, lookups: 3, failedLookups: 2 }), /DNS check degraded: 2 of 3 main-document DNS lookups failed or timed out/);
+  assert.match(render({ status: 'checked', session: { type: 'private', basis: 'resolution' }, lookups: 1, failedLookups: 0 }), /resolved to a non-public address, so the session was treated as private/);
+  assert.doesNotMatch(renderAuditReportHtml(base), /DNS check/, 'old reports are unchanged');
+});
+
+test('DNS guard M1 MCP: a degraded check is in the start response and in later responses', async t => {
+  const fixture = await site(t), projectRoot = await workspace(t);
+  const handlers = new Map(), server = { registerTool: (name, _spec, handler) => handlers.set(name, handler), close: async () => {}, server: {} };
+  registerAuditTools(server, { openAgent: (input, options) => openAuditAgent(input, { ...options, liveOptions: { createBrowser: injectedBrowser() } }) });
+  const started = (await handlers.get('a11y_audit_start')({ manifest: { projectRoot, url: `${fixture.origin('nxdomain.example')}/`, startupAxe: false, wallSeconds: 60 } })).structuredContent;
+  t.after(() => handlers.get('a11y_audit_close')({ runId: started.runId }));
+  assert.equal(started.success, true, JSON.stringify(started.error));
+  assert.equal(started.dnsCheck.status, 'degraded'); assert.equal(started.dnsCheck.session.resolution.error, 'ENOTFOUND');
+  const stepped = (await handlers.get('a11y_audit_request')({ runId: started.runId, request: { tool: 'step', actions: [{ action: 'snapshot' }] } })).structuredContent;
+  assert.equal(stepped.success, true); assert.equal(stepped.dnsCheck.status, 'degraded'); assert.match(stepped.dnsCheck.note, /may not have been detected/);
 });

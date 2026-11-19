@@ -240,7 +240,9 @@ export async function openAuditSession(input, lifecycle = {}) {
   }
 
   const session = Object.freeze({ observeStatus, probeSelectors, runId, directory, manifest: retainedManifest, startedAt, deadlineAt: new Date(deadline).toISOString(), perform, finish, finished,
-    get status() { return phase; }, get records() { return Object.freeze([...records]); } });
+    get status() { return phase; }, get records() { return Object.freeze([...records]); },
+    // Bounded DNS check summary (status, session type basis, degraded lookups); null for a browser without one.
+    get dnsCheck() { try { return browser.dnsCheckReport?.() ?? null; } catch { return null; } } });
   lifecycle.signal?.addEventListener('abort', onAbort, { once: true });
   if (lifecycle.signal?.aborted) onAbort();
   wallTimer = setTimeout(() => {

@@ -98,8 +98,8 @@
     },
     {
       "path": "examples/byoa-audit.md",
-      "bytes": 17197,
-      "sha256": "7465a613262e03db0522423ad14810a0d91d81100accd123384f872e7157cd10"
+      "bytes": 18473,
+      "sha256": "d5df6845ede38ad654543e31210f572f468d08b19ef8d4cce3f59301ec7631a9"
     },
     {
       "path": "examples/codex-cli.md",

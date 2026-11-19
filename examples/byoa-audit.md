@@ -136,6 +136,12 @@ New reviews declare `directEvidencePolicy:"dom-predicates-v1"`. An ordinary nonv
 
 Visual, keyboard and status claims use their own evidence requirements. The reviewer still evaluates each claim after the tool checks its prerequisites. Historical declaration-only and `dom-citations-v1` reviews preserve their original bytes but `audit-check` returns `needs_review`, with `reviewPolicy` and `requiresReReview:true`. Summaries label them; HTML and inventory display their earlier confirmations as needing re-review. They are not current-policy confirmations.
 
+## Read and print the HTML report
+
+The report header shows the report state (draft checkpoint, awaiting review, or independently reviewed), the audited page, and the notice that the report is not a conformance certification. The summary counts findings by review status and by source and lists the success criteria that have findings. A criterion with no finding is not a pass. Findings are grouped by success criterion. Each card shows status, source, target, scope, observation, and any review verdict. Reproduction steps, the author's rationale, evidence IDs, and missing evidence are collapsed under each card. The observation inventory is collapsed below its counts. When every recorded evidence path is in one directory, the table caption names that directory and each row shows only the file name. Otherwise rows show full paths.
+
+The page contains no script and follows the system light or dark setting. Printing uses the light colors. Browsers that support the `::details-content` selector (Chrome 131, Safari 18.4, Firefox 143, or later) print every collapsed section expanded. Older browsers print collapsed sections closed, so their printouts omit that content. In those browsers, open each section before printing, or use the JSON report as the complete record.
+
 ## Export a large HTML report
 
 Pass a checkpoint, proposal, or reviewed report. Choose a new output directory.

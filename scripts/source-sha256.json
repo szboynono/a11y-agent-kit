@@ -18,8 +18,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 14674,
-      "sha256": "004e6991efad8e896a40e227584a90d0e7532858814bbb2df7accd32df6e45de"
+      "bytes": 4362,
+      "sha256": "4d4686755059968da0cee384a092bdd334e295390fe33ce109316952d6172a4e"
     },
     {
       "path": "THIRD_PARTY_NOTICES.md",
@@ -88,13 +88,13 @@
     },
     {
       "path": "examples/audit-workflow.md",
-      "bytes": 3645,
-      "sha256": "c1cab276f28519223d3acd84dfab9410f60b72edec94be0c84a64c62ba65f561"
+      "bytes": 3745,
+      "sha256": "c08775ae8c965511a0cac0bbc91ef2e15404c2c6072b5dccf1bbbd60a4970d70"
     },
     {
       "path": "examples/byoa-audit.md",
-      "bytes": 15044,
-      "sha256": "bfd4d015c3936cb601f7be4a09ed583193a0bdb8bd463df3554fe4d0c47ebf39"
+      "bytes": 15936,
+      "sha256": "83c9c74c5bcf4002e0877650ea6f10c66b52aa033b1cf865a7a09a8ee16bce32"
     },
     {
       "path": "examples/codex-cli.md",
@@ -108,8 +108,8 @@
     },
     {
       "path": "examples/first-use.md",
-      "bytes": 5107,
-      "sha256": "a717e955fa69fe68ad9c9037699a92e58f1cff997e16a87dcdcb0fd35727539d"
+      "bytes": 4002,
+      "sha256": "7fcbc40f695deebe90f1d0a3d562fef7cc17c7f9ccb150a681492eff41785fb8"
     },
     {
       "path": "examples/manifest.json",
@@ -118,8 +118,8 @@
     },
     {
       "path": "llms.txt",
-      "bytes": 3833,
-      "sha256": "c2713024e1276b0ee4ed23226bd65007fd5128b0b583e4ccf97c8847067f776e"
+      "bytes": 3084,
+      "sha256": "253416d73c15ec7f36237ebbea73743761fe76e6d448ac0e555f14fc5c8e3411"
     },
     {
       "path": "package-lock.json",
@@ -143,8 +143,8 @@
     },
     {
       "path": "skills/a11y-audit/SKILL.md",
-      "bytes": 55924,
-      "sha256": "dc37970304257e8bcc525c864bab4afad1c09480453a0086fcd3294a494dc7f9"
+      "bytes": 55851,
+      "sha256": "c9cc177b9f4baac08826fe408246e4a55f3ce225bfe881e737fef3c3a005302b"
     },
     {
       "path": "skills/a11y-audit/references/evidence-policy-v2.md",

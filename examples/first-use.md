@@ -1,49 +1,54 @@
-# First local trial with your own agent
+# Run a first local audit with your own agent
 
-Use the extracted source directory, Node 22.12+, the locked dependencies and matching Playwright Chromium described in the README. The commands below run from the tool checkout; replace all absolute placeholders with your own canonical paths. Keep the application running. Nothing here selects or calls a model, edits application source, or changes global agent configuration.
+Use Node.js 22.12+ and npm. Keep your application running and install the Chromium build that matches the package:
 
-Create `/absolute/application/evidence/audit-manifest.json` (create `evidence/` first):
+```sh
+npx -y playwright@1.64.1 install chromium
+```
+
+If Chromium reports missing Linux system libraries, use your permitted elevation flow to run `npx -y playwright@1.64.1 install-deps chromium`.
+
+## Collect an initial sample
+
+From your application's directory, create `evidence/` and save this as `evidence/audit-manifest.json`. Use the canonical absolute project path (`pwd -P` in a POSIX shell) and your running application's URL.
 
 ```json
 {
   "projectRoot": "/absolute/application",
-  "url": "http://127.0.0.1:3000/",
-  "standard": { "version": "2.2", "targetLevel": "AA" },
-  "wallSeconds": 600,
-  "maxActions": 180,
-  "maxElements": 3000
+  "url": "http://127.0.0.1:3000/"
 }
 ```
 
-In your existing GPT/Codex or other coding-agent session, give this instruction:
-
-> Read `/absolute/tool/skills/a11y-audit/SKILL.md`. Use `node /absolute/tool/src/cli.js audit-agent /absolute/application/evidence/audit-manifest.json` as a persistent JSONL child process. Audit this running application, adopt bound axe observations, explore the requested business states, read original evidence and view original PNGs before visual claims. Save candidates early, explicitly submit the acknowledged checkpoint digest before the budget ends, and return the proposal, collection and checkpoint paths. Keep unresolved observations and untested scope visible. Do not edit application source. Then render an HTML report from the returned proposal path.
-
-`audit-agent` runs no `snapshot` or `axe` on its own (only MCP `a11y_audit_start` does); the agent's first request should be `{"tool":"step","actions":[{"action":"snapshot"},{"action":"axe"}]}`.
-
-An agent that cannot keep stdin open can start with this fixed collection instead:
-
 ```sh
-node /absolute/tool/src/cli.js audit /absolute/application/evidence/audit-manifest.json --summary
+npx -y a11y-agent-kit@0.1.1 audit evidence/audit-manifest.json --summary
 ```
 
-Keep the returned `reportPath`; a collection is evidence, not reviewed findings. Read its local JSON records and attachment paths. For adaptive CLI operation envelopes and the submit/review schema, follow [BYOA workflow](byoa-audit.md). MCP hosts may instead configure the local stdio command `node /absolute/tool/src/cli.js serve` in their project/session configuration and call `a11y_audit_start`, `a11y_audit_request`, `a11y_audit_close`. Reuse the same manifest; keep the returned `runId` and use actual evidence IDs. No host-specific model integration is implied by generic transport tests.
+Open the JSON file at the returned `reportPath`. The default plan takes a bounded sample with DOM snapshots, axe, screenshots, text spacing, and keyboard input. Use the record and attachment paths to inspect the evidence. Findings require submission and separate review.
 
-Retrieve a report after explicit submission (or from a saved checkpoint):
+## Let your agent explore more states
+
+Paste the [README prompt](../README.md#copy-this-to-your-agent) into your coding-agent session. The agent can read the [published audit skill](https://github.com/szboynono/a11y-agent-kit/blob/v0.1.1/skills/a11y-audit/SKILL.md) or the copy at `skills/a11y-audit/SKILL.md` in the installed package. Start a new adaptive session with the same manifest and keep stdin open.
 
 ```sh
-node /absolute/tool/src/cli.js audit-report RETURNED_PROPOSAL_OR_CHECKPOINT.json --out /absolute/application/evidence/a11y-report.html
-node /absolute/tool/src/cli.js audit-check RETURNED_PROPOSAL.json --summary
-node /absolute/tool/src/cli.js audit-inventory RETURNED_PROPOSAL.json --limit 100
+npx -y a11y-agent-kit@0.1.1 audit-agent evidence/audit-manifest.json
 ```
 
-Open the HTML locally. Its JSON source, original records and hashed PNGs stay under the application's `evidence/`. The HTML needs no server or model. Screenshots are omitted by default; `--screenshots` opts into embedding original page pixels. Follow inventory continuations to retain all unresolved axe observations. In an open agent session, `read` pages original records and `view` returns the original PNG path/hash; MCP also supports explicit [inline PNG delivery](../docs/mcp-images.md) for hosts with image support.
+Read the greeting and send `{"tool":"step","actions":[{"action":"snapshot"},{"action":"axe"}]}` as the first request. MCP `a11y_audit_start` runs that step by default. The [BYOA workflow](byoa-audit.md) covers the JSONL requests, budget, batch fallback, and [stdio MCP configuration](byoa-audit.md#mcp-connection).
 
-A submitted proposal remains `needs_review`. Use a different reviewer to inspect original evidence, applicability, exceptions and scope, then supply its decisions to `audit-review`; only supported claims enter `confirmedFindings`. Do not fabricate reviewer independence. Read command JSON on nonzero exits: needs-review, incomplete, expired and error are meaningful results. `audit-check:current` proves artifact integrity/source freshness within its contract, not semantic approval, URL-to-build attestation or conformance. No whole-site compliance or real screen-reader testing is established.
+Read the original records and view the original PNGs before making visual claims. In an open session, `read` pages original records and `view` returns the original PNG path and hash. MCP also supports explicit [inline PNG delivery](../docs/mcp-images.md) for hosts with image support. Save checkpoints early and explicitly submit the last acknowledged digest. Keep unresolved axe observations and untested scope visible.
 
-Evidence paths are absolute and source-bound. Keep the original project/evidence tree in place; copying reports to another checkout or machine is not a supported replay/relocation flow. See the [source and test scope](https://github.com/szboynono/a11y-agent-kit/blob/v0.1.1/docs/publication-boundary.md).
+## Open the report and prepare review
 
-With the installation prerequisites available, run `node scripts/quickstart.mjs` against its bundled loopback example. The fixture and review decision are synthetic and invoke no model.
+Substitute the paths returned by the toolkit. Use a checkpoint JSON or the proposal JSON for HTML. Use the proposal JSON for integrity checks and inventory. Run the commands separately.
 
+```sh
+npx -y a11y-agent-kit@0.1.1 audit-report RETURNED_PROPOSAL_OR_CHECKPOINT.json --out evidence/a11y-report.html
+npx -y a11y-agent-kit@0.1.1 audit-check RETURNED_PROPOSAL.json --summary
+npx -y a11y-agent-kit@0.1.1 audit-inventory RETURNED_PROPOSAL.json --limit 100
+```
 
-For a large local HTML report, use `audit-report REPORT.json --bounded --out NEW_DIRECTORY` instead of the single-file export. Start at `NEW_DIRECTORY/index.html` and retain all numbered detail pages alongside it. The receipt enumerates paths and byte/card counts. Pages preserve original observations in order, with at most 50 cards and strictly fewer than 500,000 UTF-8 bytes per file. The new directory must not exist. Oversized individual cards fail before output creation; screenshots remain separately opt-in and subject to existing caps and the page byte limit. This changes delivery only; findings are not deduplicated or independently confirmed.
+Open the HTML locally. Use `--screenshots` only if you want to embed original page pixels. Follow the [inventory continuations](../skills/a11y-audit/SKILL.md#account-for-retained-axe-observations) for all unresolved axe observations. For a large report, add `--bounded` and pass a new directory to `--out`. Open its `index.html` and keep the numbered detail pages alongside it. The [BYOA workflow](byoa-audit.md#export-a-large-html-report) describes the output limits.
+
+A submitted proposal stays `needs_review`. Use a separate reviewer to inspect the original evidence, applicability, exceptions, and scope. Supply that reviewer's decisions to `audit-review`. Only supported claims enter `confirmedFindings`. Read JSON even on a nonzero exit. `audit-check:current` verifies artifact integrity and source freshness within its contract. It leaves semantic approval and WCAG conformance unassessed.
+
+Keep the original project and evidence tree in place. The evidence uses absolute paths and binds to the source. Review captured text, URLs, and images before letting your agent send them or sharing the report. See [earlier archive test scope](https://github.com/szboynono/a11y-agent-kit/blob/v0.1.1/docs/publication-boundary.md).

@@ -5,24 +5,24 @@ description: Discover accessibility violations with local browser evidence, comp
 
 ## First use
 
-Use the local source tree with its locked dependencies and matching Chromium installed. For a local trial without changing global agent settings, follow [first use](../../examples/first-use.md) and run the CLI from your existing agent session. See [BYOA workflow](../../examples/byoa-audit.md) for JSONL requests and report retrieval. New audits support WCAG 2.1/2.2 A/AA, default 2.2 AA.
+Use Node.js 22.12+ and npm. Install matching Chromium with `npx -y playwright@1.64.1 install chromium`. Follow [first use](../../examples/first-use.md) to run the npm CLI from your existing agent session. See [BYOA workflow](../../examples/byoa-audit.md) for JSONL requests and report retrieval. New audits support WCAG 2.1/2.2 A/AA, default 2.2 AA.
 
 CLI `audit-agent` only opens the session; unlike MCP `a11y_audit_start`, it runs no `snapshot` or `axe`. Send `{"tool":"step","actions":[{"action":"snapshot"},{"action":"axe"}]}` as your first request.
 
 ## Quick start (optional MCP)
 
-Register the local MCP server once (Node 22.12+; replace `/abs/path/to/a11y-agent-kit`):
+After installing Chromium, register the local MCP server.
 
 ```sh
-claude mcp add a11y-agent-kit -- node /abs/path/to/a11y-agent-kit/src/cli.js serve   # Claude Code
+claude mcp add a11y-agent-kit -- npx -y a11y-agent-kit@0.1.1 serve   # Claude Code
 ```
 
-Or in `.mcp.json` (Claude Code) `{"mcpServers":{"a11y-agent-kit":{"command":"node","args":["/abs/path/to/a11y-agent-kit/src/cli.js","serve"]}}}`; or in `~/.codex/config.toml` (Codex):
+Or in `.mcp.json` (Claude Code) `{"mcpServers":{"a11y-agent-kit":{"command":"npx","args":["-y","a11y-agent-kit@0.1.1","serve"]}}}`; or in `~/.codex/config.toml` (Codex):
 
 ```toml
 [mcp_servers.a11y-agent-kit]
-command = "node"
-args = ["/abs/path/to/a11y-agent-kit/src/cli.js", "serve"]
+command = "npx"
+args = ["-y", "a11y-agent-kit@0.1.1", "serve"]
 ```
 
 Then, with the target site already running (60 tool calls, 600 s; every response reports the remaining `budget` and a `next` hint):
@@ -49,7 +49,7 @@ Retained plans and records omit fill argument values, password/hidden input valu
 
 The task is to find as many actual violations as possible, with sufficient evidence for every published finding. Do not turn an axe alert, geometry measurement, computed style, confidence score, or a suspicion into an established WCAG failure. Do not obtain a clean report by shrinking scope, dropping unresolved claims, or testing only easy criteria. Preserve all criteria in the selected WCAG catalog (2.1/2.2, A/AA; new audit default 2.2 AA with 55 criteria), incomplete work, errors, and untested areas.
 
-Use `node /absolute/tool-checkout/src/cli.js` or the installed `a11y-agent-kit` binary. The target site must already be running, and Node 22.12+ plus Playwright Chromium must be available. This workflow does not change source or system permissions. Existing `analyze/verify` commands belong to the separate historical repair workflow.
+Use `npx -y a11y-agent-kit@0.1.1` with the subcommand and its arguments, or use the globally installed `a11y-agent-kit` binary. The target site must already be running, and Node 22.12+ plus Playwright Chromium must be available. This workflow does not change source or system permissions. Existing `analyze/verify` commands belong to the separate historical repair workflow.
 
 ## Collect and explore
 

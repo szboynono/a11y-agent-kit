@@ -713,7 +713,7 @@ export class AuditBrowser {
     if (reused) { this.navigatePreflight = null; chain.dnsWaitMs = reused.waitedMs ?? 0; }
     const began = performance.now();
     const pending = preflight ? Promise.resolve(preflight) : resolveNavigationTarget({ url: event.request.url, policy: this.navigationPolicy, resolver: this.hostResolver,
-      timeoutMs: DNS_NAVIGATION_WAIT_MS - (chain.dnsWaitMs ?? 0), failedHosts: this.dnsFailedHosts });
+      waitMs: DNS_NAVIGATION_WAIT_MS - (chain.dnsWaitMs ?? 0), failedHosts: this.dnsFailedHosts });
     this.pendingScreens.add(pending);
     try {
       let screened = await pending;
@@ -1104,7 +1104,7 @@ export class AuditBrowser {
           // A replayed session sends no network requests, so it resolves nothing; otherwise check the name before leaving.
           if (decision.allowed && !this.networkReplay) {
             decision = await resolveNavigationTarget({ url: target.href, policy: this.navigationPolicy, resolver: this.hostResolver,
-              timeoutMs: Math.min(DNS_NAVIGATION_WAIT_MS, budget), failedHosts: this.dnsFailedHosts });
+              waitMs: Math.min(DNS_NAVIGATION_WAIT_MS, budget), failedHosts: this.dnsFailedHosts });
             this.noteLookup(decision, 'navigate');
             // The navigation's redirect hops share the DNS wait already spent here.
             if (decision.allowed && decision.resolution) this.navigatePreflight = { host: decision.resolution.host, result: decision, waitedMs: performance.now() - started };

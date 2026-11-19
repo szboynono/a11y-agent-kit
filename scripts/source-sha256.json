@@ -18,8 +18,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 11431,
-      "sha256": "cb0ea741fbc39dfd15e3bf444295f897da7ddafbe7309e2141ad062e2cb3e560"
+      "bytes": 11740,
+      "sha256": "1770026bd32a9449192f625b2fe1c07615fe3d0905c3591fbb8e9e08af7f33d4"
     },
     {
       "path": "THIRD_PARTY_NOTICES.md",
@@ -48,8 +48,8 @@
     },
     {
       "path": "docs/state-machines.md",
-      "bytes": 27521,
-      "sha256": "f4e61e1d943a9831a5b0de6609df03eb8e65c5cd5382c28cd59929ef7560d4d8"
+      "bytes": 27609,
+      "sha256": "f4be5e908b3570b239b285f4be865691fcc97128d05d0b6041ff04a351822809"
     },
     {
       "path": "docs/test-coverage.md",
@@ -98,8 +98,8 @@
     },
     {
       "path": "examples/byoa-audit.md",
-      "bytes": 19254,
-      "sha256": "cc8c318d8d1a339e1b93c005db680d55a3425a90d0aedc75dd693486095a8c2f"
+      "bytes": 19393,
+      "sha256": "ca17b1543875f81367b61c1b80566d71d38b900e05cd53dc38002cd142f73d1b"
     },
     {
       "path": "examples/codex-cli.md",
@@ -123,8 +123,8 @@
     },
     {
       "path": "examples/remote-site.md",
-      "bytes": 17263,
-      "sha256": "5300f8616f7a220c76b8b44c97309d4e2f0122312dfb15e7521e15614b81d600"
+      "bytes": 18500,
+      "sha256": "af1ddb1071fac0b6846757f5c5fac9da17af92902384b5466d65af91b5e9acab"
     },
     {
       "path": "llms.txt",
@@ -173,8 +173,8 @@
     },
     {
       "path": "src/audit/agent.js",
-      "bytes": 61817,
-      "sha256": "817b450f53b5b41afaae737b80093e2818432f7f924c6d9bec5990a7df9ca4c3"
+      "bytes": 62466,
+      "sha256": "ff28729e05701917a1c81bd1ae8e9cb7c80fedbd2f1df4cad1354ad437d33eb6"
     },
     {
       "path": "src/audit/axe-candidates.js",
@@ -188,8 +188,8 @@
     },
     {
       "path": "src/audit/browser.js",
-      "bytes": 90111,
-      "sha256": "4de3443ab3c6de627cd390c2d447b1850c4671e1f87066b2bfae88c86b033cbd"
+      "bytes": 90105,
+      "sha256": "d599c716f462ef9c448e81f68da509e9b2fc94e417c18e238a3b6112ffbd6707"
     },
     {
       "path": "src/audit/checkpoint.js",
@@ -238,13 +238,13 @@
     },
     {
       "path": "src/audit/mcp.js",
-      "bytes": 12368,
-      "sha256": "ccaf720041e4fd7bd03181a536d4eff42c5d6bfab667ac52ea0045f9f1210297"
+      "bytes": 12963,
+      "sha256": "1b90610a57ab758074f4a860e2afdbbd05343e6d5c4db6987cda207027a6952a"
     },
     {
       "path": "src/audit/navigation.js",
-      "bytes": 28059,
-      "sha256": "9fea5a0307bd561ecfa4b5750cba4a26c164721ba56b50ae7e30d7faa42ffd75"
+      "bytes": 30710,
+      "sha256": "359731f89e22b258f04850693c9ee6a1d709ba2df2e9350c8a76b291afae0d3c"
     },
     {
       "path": "src/audit/network-replay.js",
@@ -473,8 +473,8 @@
     },
     {
       "path": "test/audit-navigation-dns.test.js",
-      "bytes": 57233,
-      "sha256": "0743e84db6ba7374b95a8bf34d546d3db9b3019310298f7616716298643f7538"
+      "bytes": 70839,
+      "sha256": "ab6e2f770b30ff41bfe6e98fee4d419c350dc55da7895e1c8b9b5e3c4da8cb0f"
     },
     {
       "path": "test/audit-navigation.test.js",

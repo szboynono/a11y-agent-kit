@@ -21,6 +21,7 @@ import { deriveCoverage, suggestNext, budgetAdvisory, COVERAGE_VERSION } from '.
 import { zodIssueDetails, errorPayload } from './error-details.js';
 import { stableSelectorIndex, STABLE_SELECTOR_NOTE } from './stable-selector.js';
 import { runStartupSweep, SWEEP_VERSION } from './sweep.js';
+import { dnsCheckBrief } from './navigation.js';
 
 export const AUDIT_EVIDENCE_GUIDANCE = `Collect original evidence BEFORE checkpoint; reserve calls/time for checkpoint and explicit submit and check both ACKs. Delivery is not confirmation; preserve unresolved limitations.
 hover uses mouse-assisted input; focus uses programmatic input and does not establish Tab reachability or keyboard focus-visible behaviour. Read original results and after-state; action success does not deliver reviewed evidence.
@@ -293,10 +294,18 @@ export async function openAuditAgent(input, injected = {}) {
     return { ...payload, targets: { note: STABLE_SELECTOR_NOTE, rows: kept, ...(kept.length < rows.length ? { omitted: rows.length - kept.length } : {}) } };
   }
 
-  /** A degraded DNS check is repeated in every response, so the agent sees that detection was reduced. */
+  /**
+   * A degraded DNS check is repeated in every response, so the agent sees that detection was reduced. Later responses
+   * carry its brief form (at most DNS_BRIEF_MAX_BYTES); the full record is in the start response and the sealed report.
+   */
   function degradedDns() {
     const dnsCheck = session.dnsCheck;
-    return dnsCheck?.status === 'degraded' ? { dnsCheck } : {};
+    return dnsCheck?.status === 'degraded' ? { dnsCheck: dnsCheckBrief(dnsCheck) } : {};
+  }
+  /** Bytes the repeated DNS check adds to a response; read pages are sized to leave this much room for it. */
+  function dnsReserve() {
+    const extra = degradedDns();
+    return extra.dnsCheck ? Buffer.byteLength(JSON.stringify(extra)) : 0;
   }
 
   function envelope(tool, payload, findings) {
@@ -427,11 +436,11 @@ export async function openAuditAgent(input, injected = {}) {
       if (request.options?.view === 'elements') {
         const { runId: _runId, view: _view, cursor, limit, ...unsupported } = request.options;
         if (Object.keys(unsupported).length) fail('INVALID_AUDIT_READ_OPTIONS', `View "elements" pages by cursor only; allowed: runId, cursor, limit. Send the pagination.nextRequest of the previous elements response.`);
-        return envelope('read', { success: true, view: 'elements', ...pageInspectElements(await recordById(request.evidenceId), { cursor, ...(limit ? { limit } : {}), maxBytes: Math.min(40_000, textLimit - 4500) }) });
+        return envelope('read', { success: true, view: 'elements', ...pageInspectElements(await recordById(request.evidenceId), { cursor, ...(limit ? { limit } : {}), maxBytes: Math.min(40_000, textLimit - 4500 - dnsReserve()) }) });
       }
       if (request.options?.view === 'axe') {
         const { runId: _runId, view: _view, cursor, limit, ...unsupported } = request.options;
-        const record = await recordById(request.evidenceId), paging = { cursor, limit, runId: session.runId, records: session.records, maxBytes: Math.min(40_000, textLimit - 4500) };
+        const record = await recordById(request.evidenceId), paging = { cursor, limit, runId: session.runId, records: session.records, maxBytes: Math.min(40_000, textLimit - 4500 - dnsReserve()) };
         if (Object.keys(unsupported).length) {
           // Keys are limited to the strict readOptions schema's fixed names, so listing them echoes nothing the caller invented.
           // Name the read for the page the caller was after (page 1, or the page at a cursor we minted); its own pagination.nextRequest
@@ -444,7 +453,8 @@ export async function openAuditAgent(input, injected = {}) {
         }
         return envelope('read', { success: true, ...pageAxeCandidates(record, standardFor(), paging) });
       }
-      return envelope('read', projectAuditRecord(await recordById(request.evidenceId), { ...request.options, runId: session.runId }, { textLimit }));
+      // Field and node pages fill the text limit less a fixed headroom; the repeated DNS check is taken off the limit first.
+      return envelope('read', projectAuditRecord(await recordById(request.evidenceId), { ...request.options, runId: session.runId }, { textLimit: textLimit - dnsReserve() }));
     }
     if (request.tool === 'view') {
       const record = await recordById(request.evidenceId);

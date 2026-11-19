@@ -8,6 +8,7 @@ import { PassThrough } from 'node:stream';
 import { openAuditAgent } from '../src/audit/agent.js';
 import { registerAuditTools } from '../src/audit/mcp.js';
 import { runAuditSessionCli } from '../src/audit/live-cli.js';
+import { AUDIT_TEXT_LIMIT, MCP_TEXT_LIMIT } from '../src/audit/projection.js';
 import { submitAudit } from '../src/audit/review.js';
 import { renderAuditReportHtml, writeAuditReport } from '../src/audit/report-html.js';
 import { AuditBrowser } from '../src/audit/browser.js';
@@ -16,6 +17,7 @@ import { errorPayload } from '../src/audit/error-details.js';
 import { errorRecord } from '../src/evidence.js';
 import {
   boundNavigationDetails, classifyAddress, CLOUD_METADATA_ADDRESSES, decideNavigation, DNS_FAILED_HOST_LIMIT, DNS_LOOKUP_TIMEOUT_MS, DNS_NAVIGATION_WAIT_MS, dnsCheckSummary,
+  DNS_BRIEF_MAX_BYTES, dnsCheckBrief,
   FLOOR_REASONS, isCloudMetadataHost, isPrivateHost, navigationBlockDetails, navigationPolicy, resolutionHost, resolveNavigationTarget, startSession, systemHostResolver,
 } from '../src/audit/navigation.js';
 import { externalProbe } from './helpers.js';
@@ -644,18 +646,29 @@ test('DNS guard m-1: a start answer with both public and private addresses opens
   assert.equal(fixture.count('mixed.example'), 2);
 });
 
-// ---------- Size of the dnsCheck record repeated in responses ----------
+// ---------- Size of the dnsCheck repeated in later responses ----------
 
-test('DNS guard: dnsCheck stays within a fixed size at its largest, so repeating it in each response is bounded', () => {
-  const longHost = `${'a'.repeat(300)}.example`;
+test('DNS guard MJ-2: only a brief dnsCheck of at most DNS_BRIEF_MAX_BYTES is repeated after the start, whatever the full record holds', t => {
+  // The full record is clipped (8 failures, 16 addresses) but still several KB, and more once JSON escapes a host; it
+  // stays in the start response and the sealed report. Later responses repeat the brief form, which has a fixed bound.
+  const longHost = `${'"'.repeat(300)}.example`;
   const addresses = Array.from({ length: 40 }, (_, index) => classifyAddress(`::ffff:10.0.${index}.1`));
   const largest = dnsCheckSummary({ session: { type: 'public', basis: 'literal_fallback', resolution: { host: longHost, resolver: 'r'.repeat(100), addresses, error: 'E'.repeat(100) } },
-    lookups: 10_000, failures: Array.from({ length: 50 }, () => ({ stage: 's'.repeat(100), host: longHost, error: 'E'.repeat(100) })), failureCount: 10_000, skipped: 10_000, entryCount: 20_000 });
-  assert.equal(largest.failures.length, 8); assert.equal(largest.failuresOmitted, 20_000 - 8); assert.equal(largest.session.resolution.addresses.length, 16);
-  const bytes = Buffer.byteLength(JSON.stringify(largest));
-  assert.ok(bytes <= 7 * 1024, `largest dnsCheck is ${bytes} bytes`);
-  // Well inside the 20,000-character MCP response cap that every response is bounded to.
-  assert.ok(bytes < 20_000 / 2);
+    lookups: Number.MAX_SAFE_INTEGER, failures: Array.from({ length: 50 }, () => ({ stage: 's'.repeat(100), host: longHost, error: 'E'.repeat(100) })),
+    failureCount: Number.MAX_SAFE_INTEGER, skipped: Number.MAX_SAFE_INTEGER, entryCount: Number.MAX_SAFE_INTEGER });
+  assert.equal(largest.failures.length, 8); assert.equal(largest.session.resolution.addresses.length, 16);
+  const fullBytes = Buffer.byteLength(JSON.stringify(largest)), brief = dnsCheckBrief(largest), briefBytes = Buffer.byteLength(JSON.stringify({ dnsCheck: brief }));
+  t.diagnostic(`full dnsCheck ${fullBytes} bytes, brief ${briefBytes} bytes`);
+  assert.ok(fullBytes > 4 * DNS_BRIEF_MAX_BYTES, 'the full record is too large to repeat in every response');
+  assert.ok(briefBytes <= DNS_BRIEF_MAX_BYTES, `brief dnsCheck is ${briefBytes} bytes`);
+  assert.deepEqual({ ...brief, note: undefined }, { status: 'degraded', session: { type: 'public', basis: 'literal_fallback' }, lookups: Number.MAX_SAFE_INTEGER,
+    failedLookups: Number.MAX_SAFE_INTEGER, skippedLookups: Number.MAX_SAFE_INTEGER, failureEntries: Number.MAX_SAFE_INTEGER, detail: 'brief', note: undefined });
+  assert.match(brief.note, /may not have been detected/); assert.doesNotMatch(JSON.stringify(brief), /example/, 'no host is repeated');
+  // Values that are not counts or known names never widen it.
+  const hostile = dnsCheckBrief({ status: 'x'.repeat(5000), session: { type: 'y'.repeat(5000), basis: 'z'.repeat(5000) }, lookups: '9'.repeat(5000), failedLookups: 1e300, skippedLookups: -1, failures: 'f'.repeat(5000), failuresOmitted: {} });
+  assert.ok(Buffer.byteLength(JSON.stringify({ dnsCheck: hostile })) <= DNS_BRIEF_MAX_BYTES);
+  assert.deepEqual([hostile.status, hostile.session.type, hostile.session.basis, hostile.lookups, hostile.failedLookups, hostile.skippedLookups], ['degraded', 'public', 'literal', 0, 0, undefined]);
+  assert.equal(dnsCheckBrief({ status: 'checked', lookups: 2, failedLookups: 0 }).note, undefined, 'a check that is not degraded has no degraded note');
 });
 
 test('DNS guard HTML: the limits list counts requests that were not looked up after a failure', () => {
@@ -664,4 +677,135 @@ test('DNS guard HTML: the limits list counts requests that were not looked up af
   assert.match(render({ status: 'degraded', session: { type: 'public', basis: 'literal_fallback' }, lookups: 1, failedLookups: 1, skippedLookups: 7 }),
     /1 of 1 main-document DNS lookup failed or timed out\. 7 later main-document requests were not looked up, because the host had already failed or the navigation had used its DNS wait\./);
   assert.doesNotMatch(render({ status: 'degraded', session: { type: 'public', basis: 'literal_fallback' }, lookups: 1, failedLookups: 1 }), /not looked up/);
+});
+
+// ---------- MJ-2: a large degraded check does not crowd out full read pages ----------
+
+// A start host with the largest session record and 8 declared hosts whose lookups fail:
+// the proxy or split-DNS case, where the full dnsCheck grows past 2 KB. Every *.example name maps to the loopback server.
+const wideLaunchArgs = ['--host-resolver-rules=MAP *.example 127.0.0.1'];
+const cdnHost = index => `static-assets-${index}.eu-west-1.cdn.example-company.example`;
+// The largest start record: a 253-character host and 16 NAT64 addresses, each naming its embedded public IPv4 address.
+const startHost = `s${'q'.repeat(62)}.${'r'.repeat(63)}.${'s'.repeat(63)}.${'t'.repeat(53)}.example`;
+const wideAnswer = Array.from({ length: 16 }, (_, i) => `64:ff9b::6810:${(0x100 + i).toString(16)}`);
+const splitResolver = () => tableResolver({ [startHost]: wideAnswer });
+const bigPage = paragraphs => `<!doctype html><html lang="en"><head><title>Big</title></head><body><main><h1>Big</h1>${
+  Array.from({ length: paragraphs }, (_, i) => `<p id="p${i}">Paragraph ${i} ${'lorem ipsum '.repeat(12)}</p><img src="data:," width="1" height="1">`).join('')}</main></body></html>`;
+const FULL_PAGE_READS = [{ view: 'field', field: '/result/visibleText' }, { view: 'field', field: '/result/nodes' }, { view: 'field', field: '/result' }, { view: 'nodes', limit: 200 }];
+
+test('DNS guard MJ-2 MCP: with 8 failed hosts and the largest start answer, the start and every full-page read stay within 20,000 characters', async t => {
+  const fixture = await site(t, () => ({ body: bigPage(400) })), projectRoot = await workspace(t);
+  const hosts = Array.from({ length: 8 }, (_, index) => cdnHost(index));
+  const handlers = new Map(), server = { registerTool: (name, _spec, handler) => handlers.set(name, handler), close: async () => {}, server: {} };
+  const { resolver } = splitResolver();
+  registerAuditTools(server, { openAgent: (input, options) => openAuditAgent(input, { ...options,
+    liveOptions: { createBrowser: manifest => new AuditBrowser(manifest, { handleSignals: false, launchArgs: wideLaunchArgs, hostResolver: resolver }) } }) });
+  const call = async (name, input) => {
+    const reply = await handlers.get(name)(input), text = reply.content[0].text;
+    assert.ok(text.length <= MCP_TEXT_LIMIT, `${name} text is ${text.length} characters`);
+    return { value: reply.structuredContent, chars: text.length };
+  };
+  const start = await call('a11y_audit_start', { manifest: { projectRoot, url: `${fixture.origin(startHost)}/`, startupAxe: true, wallSeconds: 120,
+    allowedOrigins: hosts.map(fixture.origin) } });
+  const started = start.value;
+  t.after(() => handlers.get('a11y_audit_close')({ runId: started.runId }));
+  assert.equal(started.success, true, JSON.stringify(started.error));
+  assert.equal(started.dnsCheck.session.resolution.addresses.length, 16, 'the start response keeps the full record');
+  assert.equal(started.dnsCheck.session.resolution.addresses[0].embeddedIpv4, '104.16.1.0');
+  const request = async body => (await call('a11y_audit_request', { runId: started.runId, request: body })).value;
+  const snapshot = started.startup.records.find(row => row.action === 'snapshot').evidenceId;
+  const readAll = async () => { const replies = []; for (const options of FULL_PAGE_READS) replies.push(await call('a11y_audit_request', { runId: started.runId, request: { tool: 'read', evidenceId: snapshot, options } })); return replies; };
+  const before = await readAll();
+  for (const read of before) { assert.equal(read.value.success, true); assert.equal(read.value.dnsCheck, undefined); }
+  // The startup axe preview leaves room for the full dnsCheck: the same snapshot + axe step, sent later, previews more.
+  const again = await request({ tool: 'step', actions: [{ action: 'snapshot' }, { action: 'axe' }] });
+  const axeBytes = value => Buffer.byteLength(JSON.stringify(value.axe)), startDnsBytes = Buffer.byteLength(JSON.stringify({ dnsCheck: started.dnsCheck }));
+  t.diagnostic(`axe preview: start ${axeBytes(started.startup)} bytes, later step ${axeBytes(again)} bytes`);
+  assert.ok(axeBytes(again) - axeBytes(started.startup) >= startDnsBytes / 2, `the start preview gave up ${axeBytes(again) - axeBytes(started.startup)} bytes for a ${startDnsBytes}-byte dnsCheck`);
+
+  for (const host of hosts) assert.equal((await request({ tool: 'step', actions: [{ action: 'navigate', path: `${fixture.origin(host)}/` }] })).success, true);
+  const stepped = await request({ tool: 'step', actions: [{ action: 'snapshot' }] });
+  const evidenceId = stepped.records.at(-1).evidenceId;
+  const sizes = [];
+  for (const options of FULL_PAGE_READS) {
+    const read = await call('a11y_audit_request', { runId: started.runId, request: { tool: 'read', evidenceId, options } });
+    assert.equal(read.value.success, true, `${JSON.stringify(options)}: ${JSON.stringify(read.value.error)}`);
+    assert.equal(read.value.dnsCheck.status, 'degraded', 'the degraded status is still in every response');
+    assert.equal(read.value.dnsCheck.failedLookups, 8);
+    const dnsBytes = Buffer.byteLength(JSON.stringify({ dnsCheck: read.value.dnsCheck }));
+    assert.ok(dnsBytes <= DNS_BRIEF_MAX_BYTES, `dnsCheck is ${dnsBytes} bytes`);
+    sizes.push(`${options.field ?? options.view} ${read.chars}`);
+  }
+  t.diagnostic(`start ${start.chars} characters (full dnsCheck ${Buffer.byteLength(JSON.stringify(started.dnsCheck))} bytes); full-page reads: ${sizes.join(', ')} characters`);
+  // Field pages shrink by what the repeated check takes: the same page of the same record carries that much less data.
+  const after = await readAll(), dataBytes = read => Buffer.byteLength(JSON.stringify(read.value.data));
+  after.forEach((read, index) => {
+    assert.equal(read.value.success, true, JSON.stringify(read.value.error)); assert.equal(read.value.dnsCheck.status, 'degraded');
+    if (FULL_PAGE_READS[index].view !== 'field') return;
+    const room = Buffer.byteLength(JSON.stringify({ dnsCheck: read.value.dnsCheck })), shrunk = dataBytes(before[index]) - dataBytes(read);
+    assert.ok(shrunk >= room - 64 && shrunk <= room + 64, `${FULL_PAGE_READS[index].field}: data shrank by ${shrunk} bytes for a ${room}-byte dnsCheck`);
+  });
+  // A paged read continues from its cursor after the check degraded.
+  assert.equal(after[0].value.pagination.complete, false);
+  const next = await request({ tool: 'read', evidenceId: snapshot, options: after[0].value.pagination.next });
+  assert.equal(next.success, true, JSON.stringify(next.error));
+});
+
+test('DNS guard MJ-2 JSONL agent: with 8 failed hosts, full-page reads succeed and every response line stays within 65,536 bytes', async t => {
+  // The JSONL agent writes each agent response as one line, JSON.stringify(boundAuditResponse(response)) (agent-cli.js);
+  // the agent is opened directly here so that the resolver can be injected.
+  const fixture = await site(t, () => ({ body: bigPage(1200) })), projectRoot = await workspace(t);
+  const hosts = Array.from({ length: 8 }, (_, index) => cdnHost(index));
+  const { resolver } = splitResolver();
+  const agent = await openAuditAgent({ projectRoot, url: `${fixture.origin(startHost)}/`, wallSeconds: 120, allowedOrigins: hosts.map(fixture.origin) },
+    { liveOptions: { createBrowser: manifest => new AuditBrowser(manifest, { handleSignals: false, launchArgs: wideLaunchArgs, hostResolver: resolver }) } });
+  t.after(() => agent.close({ reason: 'requested' }).catch(() => {}));
+  const line = value => { const bytes = Buffer.byteLength(JSON.stringify(value)); assert.ok(bytes <= AUDIT_TEXT_LIMIT, `line is ${bytes} bytes`); return bytes; };
+  for (const host of hosts) { const reply = await agent.request({ tool: 'step', actions: [{ action: 'navigate', path: `${fixture.origin(host)}/` }] }); line(reply); assert.equal(reply.success, true); }
+  const stepped = await agent.request({ tool: 'step', actions: [{ action: 'snapshot' }] });
+  line(stepped);
+  const full = agent.dnsCheck();
+  assert.equal(full.failures.length, 8); assert.ok(Buffer.byteLength(JSON.stringify(full)) > 2048, 'the full record is past the old 2 KB margin');
+  const sizes = [];
+  for (const options of FULL_PAGE_READS) {
+    const read = await agent.request({ tool: 'read', evidenceId: stepped.records.at(-1).evidenceId, options });
+    sizes.push(line(read));
+    assert.equal(read.success, true, `${JSON.stringify(options)}: ${JSON.stringify(read.error)}`);
+    assert.equal(read.dnsCheck.status, 'degraded'); assert.ok(Buffer.byteLength(JSON.stringify({ dnsCheck: read.dnsCheck })) <= DNS_BRIEF_MAX_BYTES);
+  }
+  t.diagnostic(`JSONL full-page reads: ${sizes.join(', ')} bytes; full dnsCheck ${Buffer.byteLength(JSON.stringify(full))} bytes`);
+});
+
+// ---------- n-A: a timeout cut short by the navigation's wait is not remembered ----------
+
+test('DNS guard n-A: a lookup that times out only because its navigation had little wait left is looked up again later', async t => {
+  const fixture = await site(t, (host, url, port) => host === 'hop.example' && url === '/x' ? { location: `http://hop2.example:${port}/y` } : {});
+  const [hop, hop2] = ['hop.example', 'hop2.example'].map(fixture.origin);
+  const failedHosts = new Map();
+  const hung = { name: 'hung', lookup: () => new Promise(() => {}) };
+  const shortened = await resolveNavigationTarget({ url: 'https://slow.example/', policy: publicPolicy, resolver: hung, waitMs: 30, failedHosts });
+  assert.deepEqual(shortened, { allowed: true, degraded: true, resolution: { host: 'slow.example', resolver: 'hung', addresses: [], error: 'LOOKUP_TIMEOUT' } });
+  assert.equal(failedHosts.size, 0, 'a shortened timeout is not a verdict on the host');
+  await resolveNavigationTarget({ url: 'https://slow.example/', policy: publicPolicy, resolver: hung, timeoutMs: 30, waitMs: 1000, failedHosts });
+  assert.deepEqual([...failedHosts], [['slow.example', 'LOOKUP_TIMEOUT']], 'a timeout after the full lookup bound is remembered');
+  const refused = { name: 'nx', lookup: async () => { throw dnsError('ENOTFOUND'); } };
+  await resolveNavigationTarget({ url: 'https://nxdomain.example/', policy: publicPolicy, resolver: refused, waitMs: 30, failedHosts });
+  assert.equal(failedHosts.get('nxdomain.example'), 'ENOTFOUND', 'an answer that the name does not exist is remembered whatever the wait');
+
+  // In a browser: a -> b redirect where each lookup takes 1.2 s. b gets the 0.8 s left and times out; a later navigate looks b up again.
+
+  const calls = [];
+  // Necessary timer: it stands in for a slow resolver; the late answer is ignored once its lookup has timed out.
+  const slowResolver = { name: 'slow', lookup: host => { calls.push(host); return new Promise(resolve => setTimeout(() => resolve([{ address: '8.8.8.8', family: 4 }]), 1200)); } };
+  const browser = new AuditBrowser(parseAuditManifest({ projectRoot: '/tmp', url: `${fixture.origin('127.0.0.1')}/`, followRedirects: true, allowedOrigins: [hop, hop2] }), { launchArgs, hostResolver: slowResolver });
+  t.after(() => browser.close());
+  await browser.start();
+  assert.equal((await browser.execute({ action: 'navigate', path: `${hop}/x` }, 6000)).success, true);
+  assert.deepEqual(calls, ['hop.example', 'hop2.example']);
+  const again = await browser.execute({ action: 'navigate', path: `${hop2}/y` }, 6000);
+  assert.equal(again.success, true, JSON.stringify(again.error));
+  assert.deepEqual(calls, ['hop.example', 'hop2.example', 'hop2.example'], 'hop2 is looked up again instead of being skipped as failed');
+  const { dnsCheck } = browser.navigationReport();
+  assert.deepEqual([dnsCheck.status, dnsCheck.lookups, dnsCheck.failedLookups, dnsCheck.skippedLookups], ['degraded', 3, 1, undefined]);
+  assert.deepEqual(dnsCheck.failures, [{ stage: 'navigate', host: 'hop2.example', error: 'LOOKUP_TIMEOUT' }]);
 });

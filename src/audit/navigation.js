@@ -214,21 +214,29 @@ function rememberFailedHost(failedHosts, host, error) {
  *
  * `failedHosts` (a session Map of host to error code) makes failures sticky: a failed host is recorded there, and a
  * later request to it degrades at once with the recorded error and `skipped: 'host_failed_before'`, without waiting
- * again. A `timeoutMs` of 0 or less (the navigation's DNS wait is used up) degrades at once with
+ * again. `waitMs` is what is left of the navigation's DNS wait; the lookup waits at most the smaller of it and
+ * `timeoutMs`. A wait of 0 or less (the navigation's DNS wait is used up) degrades at once with
  * `LOOKUP_BUDGET_EXHAUSTED` and `skipped: 'budget_exhausted'`; that host is not remembered, since it was not tried.
+ * A lookup that times out only because `waitMs` cut its wait short is not remembered either: it was not given its
+ * full bound, so a later navigation looks the host up again instead of skipping it.
  */
-export async function resolveNavigationTarget({ url, policy, resolver = systemHostResolver, timeoutMs = DNS_LOOKUP_TIMEOUT_MS, failedHosts }) {
+export async function resolveNavigationTarget({ url, policy, resolver = systemHostResolver, timeoutMs = DNS_LOOKUP_TIMEOUT_MS, waitMs = Infinity, failedHosts }) {
   const host = resolutionHost(url);
   if (!host) return { allowed: true };
   const base = { host, resolver: typeof resolver?.name === 'string' && resolver.name ? resolver.name : 'injected' };
   const degraded = (error, skipped) => ({ allowed: true, degraded: true, ...(skipped ? { skipped } : {}), resolution: { ...base, addresses: [], error } });
   const known = failedHosts instanceof Map ? failedHosts.get(host) : undefined;
   if (known !== undefined) return degraded(known, 'host_failed_before');
-  if (!(timeoutMs > 0)) return degraded('LOOKUP_BUDGET_EXHAUSTED', 'budget_exhausted');
+  const bound = Math.min(timeoutMs, DNS_LOOKUP_TIMEOUT_MS), wait = Math.min(bound, waitMs);
+  if (!(wait > 0)) return degraded('LOOKUP_BUDGET_EXHAUSTED', 'budget_exhausted');
   const failed = error => { rememberFailedHost(failedHosts, host, error); return degraded(error); };
   let answers;
-  try { answers = await boundedLookup(resolver, host, Math.min(timeoutMs, DNS_LOOKUP_TIMEOUT_MS)); }
-  catch (error) { return failed(typeof error?.code === 'string' && error.code ? error.code : 'LOOKUP_FAILED'); }
+  try { answers = await boundedLookup(resolver, host, wait); }
+  catch (error) {
+    const code = typeof error?.code === 'string' && error.code ? error.code : 'LOOKUP_FAILED';
+    // Cut short by the navigation's remaining wait: a failed lookup for this navigation, but not a verdict on the host.
+    return code === 'LOOKUP_TIMEOUT' && wait < bound ? degraded(code) : failed(code);
+  }
   if (!Array.isArray(answers) || answers.length === 0) return failed('NO_ADDRESSES');
   const addresses = answers.map(answer => classifyAddress(typeof answer === 'string' ? answer : answer?.address));
   const cloudMetadata = addresses.some(item => item.cloudMetadata);
@@ -274,6 +282,9 @@ function boundResolution(value) {
 
 const FAILURE_LIMIT = 8;
 export const DNS_DEGRADED_NOTE = 'At least one DNS lookup failed or timed out, or was skipped, so those requests were allowed on the IP-literal and localhost-name check only. A host whose lookup failed is not looked up again in this session, and a navigation that has used its DNS wait does not look up its later hops. A DNS name that reaches a private address may not have been detected. This is common behind a proxy that resolves names itself, or offline.';
+/** Upper bound, in UTF-8 bytes of its JSON, of the brief DNS check repeated in later agent and MCP responses. */
+export const DNS_BRIEF_MAX_BYTES = 600;
+export const DNS_BRIEF_NOTE = 'DNS lookups failed, timed out or were skipped, so those requests were checked against IP literals and localhost names only; a DNS name that reaches a private address may not have been detected. The hosts are listed in navigation.dnsCheck of the sealed audit report.';
 const SESSION_TYPES = ['public', 'private'], SESSION_BASES = ['literal', 'resolution', 'literal_fallback'];
 
 /**
@@ -283,7 +294,9 @@ const SESSION_TYPES = ['public', 'private'], SESSION_BASES = ['literal', 'resolu
  * the session type was decided: from the start URL literal, from its DNS answer, or from the literal after that lookup
  * failed. `skippedLookups` (only when nonzero) counts requests allowed without a lookup: to a host that already failed
  * in this session, or after their navigation used its DNS wait. `failures` lists each failed host once, plus each host
- * skipped for the wait (`LOOKUP_BUDGET_EXHAUSTED`); `entryCount` is how many such entries there were in all.
+ * skipped for the wait (`LOOKUP_BUDGET_EXHAUSTED`, listed each time). A host is listed again only when it is looked up
+ * again: after a timeout cut short by its navigation's wait, or after more than `DNS_FAILED_HOST_LIMIT` other hosts
+ * failed. `entryCount` is how many such entries there were in all.
  */
 export function dnsCheckSummary({ replay = false, session, lookups = 0, failures = [], failureCount = failures.length, skipped = 0, entryCount = Math.max(failureCount, failures.length) } = {}) {
   const status = replay ? 'not_applicable' : failureCount > 0 || skipped > 0 ? 'degraded' : lookups > 0 ? 'checked' : 'not_used';
@@ -295,6 +308,27 @@ export function dnsCheckSummary({ replay = false, session, lookups = 0, failures
       ...(session?.resolution ? { resolution: boundResolution(session.resolution) } : {}) },
     lookups, failedLookups: failureCount, ...(skipped > 0 ? { skippedLookups: skipped } : {}),
     ...(failureCount > 0 || skipped > 0 ? { failures: kept, ...(entryCount > kept.length ? { failuresOmitted: entryCount - kept.length } : {}), note: DNS_DEGRADED_NOTE } : {}),
+  };
+}
+
+/**
+ * The brief form of a degraded DNS check, repeated in every later agent and MCP response so the degraded status stays
+ * visible without crowding out evidence pages: status, how the session type was decided, the counts and a fixed note.
+ * Hosts, errors and the start answer stay in the full summary (the start response and the sealed report). The note is
+ * given only when degraded. Every field
+ * is an enumerated string, a safe integer or the fixed note, so its JSON never exceeds `DNS_BRIEF_MAX_BYTES`.
+ */
+export function dnsCheckBrief(summary) {
+  const count = value => Number.isSafeInteger(value) && value >= 0 ? value : 0;
+  const failures = Array.isArray(summary?.failures) ? summary.failures.length : 0;
+  return {
+    status: ['checked', 'degraded', 'not_used', 'not_applicable'].includes(summary?.status) ? summary.status : 'degraded',
+    session: { type: SESSION_TYPES.includes(summary?.session?.type) ? summary.session.type : 'public',
+      basis: SESSION_BASES.includes(summary?.session?.basis) ? summary.session.basis : 'literal' },
+    lookups: count(summary?.lookups), failedLookups: count(summary?.failedLookups),
+    ...(count(summary?.skippedLookups) > 0 ? { skippedLookups: count(summary.skippedLookups) } : {}),
+    failureEntries: count(failures + count(summary?.failuresOmitted)),
+    detail: 'brief', ...(summary?.status === 'degraded' ? { note: DNS_BRIEF_NOTE } : {}),
   };
 }
 

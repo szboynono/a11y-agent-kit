@@ -5,6 +5,7 @@ import { boundAuditResponse, MCP_TEXT_LIMIT } from './projection.js';
 import { errorPayload } from './error-details.js';
 import { SWEEP_RESERVE_BYTES, SWEEP_VERSION, fitSweep } from './sweep.js';
 import { createUntrustedEnvelope, UNTRUSTED_ENVELOPE_RESERVE } from './untrusted.js';
+import { dnsCheckBrief } from './navigation.js';
 
 const inlineReply = Symbol('inlineReply');
 const imageOutput = z.enum(['path', 'inline']).optional();
@@ -75,8 +76,11 @@ export function registerAuditTools(server, { runtimeProfile, openAgent = openAud
     started = true;
     // One ordinary step, counted once like any other: 1 tool call and 2 actions, which the agent would otherwise have spent on firstRequest.
     const sweeping = Boolean(startupAxe && startupSweep);
+    // The start response carries the full DNS check, so the axe page leaves room for it as well as for startup.sweep.
+    const dnsBytes = json => json ? Buffer.byteLength(JSON.stringify({ dnsCheck: json })) : 0;
+    const startDns = agent.dnsCheck?.() ?? null, dnsRoom = dnsBytes(startDns);
     // The axe page leaves room for startup.sweep; candidates past it page via read view:'axe' as usual.
-    const first = startupAxe ? await agent.request({ tool: 'step', actions: [{ action: 'snapshot' }, { action: 'axe' }] }, { reserveBytes: sweeping ? SWEEP_RESERVE_BYTES : 0 }) : null;
+    const first = startupAxe ? await agent.request({ tool: 'step', actions: [{ action: 'snapshot' }, { action: 'axe' }] }, { reserveBytes: (sweeping ? SWEEP_RESERVE_BYTES : 0) + dnsRoom }) : null;
     // A failed sweep never blocks the start: its error is reported in startup.sweep.error and the session stays open.
     let swept = null;
     if (sweeping) {
@@ -84,7 +88,9 @@ export function registerAuditTools(server, { runtimeProfile, openAgent = openAud
       catch (error) { swept = { success: false, sweep: { version: SWEEP_VERSION, error: errorPayload(error) } }; }
     }
     const progress = swept?.coverage ? swept : first;
-    const dnsCheck = agent.dnsCheck?.() ?? null;
+    // A check that grew past the room left for it (the startup sweep navigated) is given in brief; the sealed report keeps it in full.
+    const latestDns = agent.dnsCheck?.() ?? null;
+    const dnsCheck = latestDns && dnsBytes(latestDns) > dnsRoom ? dnsCheckBrief(latestDns) : latestDns;
     const response = sweep => ({ success: true, runId: agent.runId, directory: agent.directory, evidencePolicy: agent.evidencePolicy, budget: agent.budget(),
       ...(dnsCheck ? { dnsCheck } : {}),
       playbook: AUDIT_PLAYBOOK,

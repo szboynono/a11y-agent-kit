@@ -1,0 +1,10 @@
+{"action":"snapshot"}
+{"action":"axe"}
+{"action":"screenshot"}
+{"action":"viewport","width":320,"height":900}
+{"action":"snapshot"}
+{"action":"screenshot"}
+{"action":"viewport","width":1280,"height":900}
+{"action":"spacing","enabled":true}
+{"action":"screenshot"}
+{"command":"finish"}

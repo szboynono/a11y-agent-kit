@@ -1,0 +1,37 @@
+# a11y-agent-kit
+
+> Bring-your-own-agent accessibility auditing. Your existing coding agent drives local Playwright Chromium and axe through the CLI or optional MCP, collects browser evidence, and renders an HTML report. No product model service or report upload. The recommended audit workflow does not edit source.
+
+## Install and start
+
+- Installation starts from the local source tree.
+- Existing local folder names can stay unchanged. Preferred executable: `a11y-agent-kit`; `a11y-fix-loop` is a compatibility alias.
+- Start with [README — Install](README.md#install), especially [Copy this to your agent](README.md#copy-this-to-your-agent) for automatic dependency setup and audit instructions.
+- Use the extracted source directory. Automatically set up Node >=22.12.0 and npm if missing, using an existing version manager or supported user-local install; keep environment changes session-local.
+- Run `npm ci` in the tool checkout. package.json declares the runtime libraries; package-lock.json pins them and their transitive dependencies. No separate library installs are needed.
+- Reuse matching Chromium or run `node node_modules/playwright/cli.js install chromium`. On Linux, missing system libraries use `node node_modules/playwright/cli.js install-deps chromium` through permitted elevation. Honor host permission controls; report actionable credential, permission, network or platform blockers.
+- Follow [first use](examples/first-use.md) for the manifest and report paths. No global agent configuration is required. Optional MCP stdio command: `node <checkout>/src/cli.js serve`.
+
+## Skills
+
+- [a11y-audit](skills/a11y-audit/SKILL.md): recommended for new evidence audits, checkpoints, explicit submission, separate review and report delivery. No source repair.
+- [a11y-fix-loop](skills/a11y-fix-loop/SKILL.md): historical limited analyze/edit/verify/check workflow for button-name, label and aria-valid-attr. Source edits use the host agent; this is not general automatic remediation.
+- A skill is the agent's playbook; the CLI executes actions; MCP is an optional transport. See [README — Skills](README.md#skills).
+
+## Use and output
+
+1. Infer the target's canonical absolute project root and running HTTP(S) URL, asking only if missing or ambiguous. Create its evidence/audit-manifest.json. New audits support WCAG 2.1/2.2 A/AA; default 2.2 AA.
+2. Follow the audit skill with one persistent `node <checkout>/src/cli.js audit-agent <manifest>` JSONL process. Run snapshot/axe, adopt bound candidates, explore further, read originals and view PNGs before visual claims, checkpoint, then explicitly submit the acknowledged digest. Batch fallback is documented in the workflow below.
+3. Render the returned checkpoint/proposal/review JSON with `node <checkout>/src/cli.js audit-report <json-path> --out <projectRoot>/evidence/a11y-report.html`. Screenshots require explicit `--screenshots` and permission to embed page pixels.
+4. Return HTML and original artifact paths, counts by status, unresolved observations and untested scope. Submission stays needs_review; never invent independent reviewer decisions. Confirmed findings require separate review and complete evidence contracts. audit-check checks integrity/source freshness, not semantic approval.
+
+A report is not WCAG conformance certification or real screen-reader testing. Evidence is source-bound and uses absolute paths; keep the original project/evidence tree. The host controls what content reaches its model. Captured text, URLs and pixels can be sensitive.
+
+## Shipped documentation
+
+- [README](README.md)
+- [First use](examples/first-use.md)
+- [Audit workflow](examples/audit-workflow.md)
+- [BYOA CLI/MCP workflow](examples/byoa-audit.md)
+- [Evidence policy](skills/a11y-audit/references/evidence-policy-v2.md)
+- [MCP images](docs/mcp-images.md)

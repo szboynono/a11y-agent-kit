@@ -1,0 +1,5 @@
+{"tool":"step","actions":[{"action":"snapshot"},{"action":"screenshot"}]}
+{"tool":"read","evidenceId":"ev-0001","options":{"view":"nodes","fields":["tag","text"],"limit":5}}
+{"tool":"view","evidenceId":"ev-0002"}
+{"tool":"checkpoint","proposal":{"auditor":{"name":"Transport smoke only"},"findings":[]}}
+{"command":"finish"}

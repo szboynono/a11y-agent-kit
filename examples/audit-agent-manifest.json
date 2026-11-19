@@ -1,0 +1,7 @@
+{
+  "projectRoot": "/absolute/path/to/your/site",
+  "url": "http://127.0.0.1:3000/",
+  "maxActions": 180,
+  "wallSeconds": 600,
+  "maxElements": 3000
+}

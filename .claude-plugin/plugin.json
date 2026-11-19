@@ -1,0 +1,23 @@
+{
+  "name": "a11y-agent-kit",
+  "description": "Accessibility audit tools for your own coding agent: local Chromium and axe evidence, WCAG 2.2 AA tracking, independently reviewed findings, and a one-file HTML report.",
+  "version": "0.1.0",
+  "license": "MIT",
+  "keywords": [
+    "accessibility",
+    "a11y",
+    "wcag",
+    "axe",
+    "audit",
+    "mcp"
+  ],
+  "mcpServers": {
+    "a11y-agent-kit": {
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/src/cli.js",
+        "serve"
+      ]
+    }
+  }
+}

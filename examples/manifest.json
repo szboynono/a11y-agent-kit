@@ -1,0 +1,21 @@
+{
+  "projectRoot": "/absolute/path/to/your/site",
+  "url": "http://127.0.0.1:3000",
+  "rules": ["button-name", "label", "aria-valid-attr"],
+  "viewport": { "width": 1280, "height": 800 },
+  "states": [
+    {
+      "id": "search-dialog",
+      "steps": [
+        { "action": "click", "selector": "#open-search" },
+        { "action": "waitFor", "selector": "[role=dialog]" }
+      ],
+      "assertions": [
+        { "type": "visible", "selector": "[role=dialog]" },
+        { "type": "enabled", "selector": "#search-input" },
+        { "type": "focused", "selector": "#search-input" },
+        { "type": "count", "selector": "#search-input", "value": 1 }
+      ]
+    }
+  ]
+}

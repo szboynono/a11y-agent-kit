@@ -1,0 +1,348 @@
+{
+  "id": "wcag22-aa-20241212-v1",
+  "standard": "WCAG",
+  "version": "2.2",
+  "targetLevel": "AA",
+  "normativeSource": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/",
+  "overviewSource": "https://www.w3.org/WAI/standards-guidelines/wcag/",
+  "conformanceSource": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#conformance-reqs",
+  "retrievedAt": "2026-10-29",
+  "sourceSha256": "6e3c5fe397257cae509a2fb4752b73062cf8cbeb92c2cec618989b17e4cf7057",
+  "criteriaTotal": 55,
+  "levelCounts": {
+    "A": 31,
+    "AA": 24
+  },
+  "criteria": [
+    {
+      "id": "1.1.1",
+      "level": "A",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#non-text-content",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/non-text-content.html"
+    },
+    {
+      "id": "1.2.1",
+      "level": "A",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#audio-only-and-video-only-prerecorded",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/audio-only-and-video-only-prerecorded.html"
+    },
+    {
+      "id": "1.2.2",
+      "level": "A",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#captions-prerecorded",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/captions-prerecorded.html"
+    },
+    {
+      "id": "1.2.3",
+      "level": "A",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#audio-description-or-media-alternative-prerecorded",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/audio-description-or-media-alternative-prerecorded.html"
+    },
+    {
+      "id": "1.2.4",
+      "level": "AA",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#captions-live",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/captions-live.html"
+    },
+    {
+      "id": "1.2.5",
+      "level": "AA",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#audio-description-prerecorded",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/audio-description-prerecorded.html"
+    },
+    {
+      "id": "1.3.1",
+      "level": "A",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#info-and-relationships",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/info-and-relationships.html"
+    },
+    {
+      "id": "1.3.2",
+      "level": "A",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#meaningful-sequence",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/meaningful-sequence.html"
+    },
+    {
+      "id": "1.3.3",
+      "level": "A",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#sensory-characteristics",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/sensory-characteristics.html"
+    },
+    {
+      "id": "1.3.4",
+      "level": "AA",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#orientation",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/orientation.html"
+    },
+    {
+      "id": "1.3.5",
+      "level": "AA",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#identify-input-purpose",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/identify-input-purpose.html"
+    },
+    {
+      "id": "1.4.1",
+      "level": "A",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#use-of-color",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/use-of-color.html"
+    },
+    {
+      "id": "1.4.2",
+      "level": "A",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#audio-control",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/audio-control.html"
+    },
+    {
+      "id": "1.4.3",
+      "level": "AA",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#contrast-minimum",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html"
+    },
+    {
+      "id": "1.4.4",
+      "level": "AA",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#resize-text",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/resize-text.html"
+    },
+    {
+      "id": "1.4.5",
+      "level": "AA",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#images-of-text",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/images-of-text.html"
+    },
+    {
+      "id": "1.4.10",
+      "level": "AA",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#reflow",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/reflow.html"
+    },
+    {
+      "id": "1.4.11",
+      "level": "AA",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#non-text-contrast",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html"
+    },
+    {
+      "id": "1.4.12",
+      "level": "AA",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#text-spacing",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/text-spacing.html"
+    },
+    {
+      "id": "1.4.13",
+      "level": "AA",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#content-on-hover-or-focus",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/content-on-hover-or-focus.html"
+    },
+    {
+      "id": "2.1.1",
+      "level": "A",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#keyboard",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/keyboard.html"
+    },
+    {
+      "id": "2.1.2",
+      "level": "A",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#no-keyboard-trap",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/no-keyboard-trap.html"
+    },
+    {
+      "id": "2.1.4",
+      "level": "A",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#character-key-shortcuts",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/character-key-shortcuts.html"
+    },
+    {
+      "id": "2.2.1",
+      "level": "A",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#timing-adjustable",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/timing-adjustable.html"
+    },
+    {
+      "id": "2.2.2",
+      "level": "A",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#pause-stop-hide",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/pause-stop-hide.html"
+    },
+    {
+      "id": "2.3.1",
+      "level": "A",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#three-flashes-or-below-threshold",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/three-flashes-or-below-threshold.html"
+    },
+    {
+      "id": "2.4.1",
+      "level": "A",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#bypass-blocks",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/bypass-blocks.html"
+    },
+    {
+      "id": "2.4.2",
+      "level": "A",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#page-titled",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/page-titled.html"
+    },
+    {
+      "id": "2.4.3",
+      "level": "A",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#focus-order",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/focus-order.html"
+    },
+    {
+      "id": "2.4.4",
+      "level": "A",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#link-purpose-in-context",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/link-purpose-in-context.html"
+    },
+    {
+      "id": "2.4.5",
+      "level": "AA",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#multiple-ways",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/multiple-ways.html"
+    },
+    {
+      "id": "2.4.6",
+      "level": "AA",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#headings-and-labels",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/headings-and-labels.html"
+    },
+    {
+      "id": "2.4.7",
+      "level": "AA",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#focus-visible",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/focus-visible.html"
+    },
+    {
+      "id": "2.4.11",
+      "level": "AA",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#focus-not-obscured-minimum",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/focus-not-obscured-minimum.html"
+    },
+    {
+      "id": "2.5.1",
+      "level": "A",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#pointer-gestures",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/pointer-gestures.html"
+    },
+    {
+      "id": "2.5.2",
+      "level": "A",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#pointer-cancellation",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/pointer-cancellation.html"
+    },
+    {
+      "id": "2.5.3",
+      "level": "A",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#label-in-name",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/label-in-name.html"
+    },
+    {
+      "id": "2.5.4",
+      "level": "A",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#motion-actuation",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/motion-actuation.html"
+    },
+    {
+      "id": "2.5.7",
+      "level": "AA",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#dragging-movements",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/dragging-movements.html"
+    },
+    {
+      "id": "2.5.8",
+      "level": "AA",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#target-size-minimum",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html"
+    },
+    {
+      "id": "3.1.1",
+      "level": "A",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#language-of-page",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/language-of-page.html"
+    },
+    {
+      "id": "3.1.2",
+      "level": "AA",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#language-of-parts",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/language-of-parts.html"
+    },
+    {
+      "id": "3.2.1",
+      "level": "A",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#on-focus",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/on-focus.html"
+    },
+    {
+      "id": "3.2.2",
+      "level": "A",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#on-input",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/on-input.html"
+    },
+    {
+      "id": "3.2.3",
+      "level": "AA",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#consistent-navigation",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/consistent-navigation.html"
+    },
+    {
+      "id": "3.2.4",
+      "level": "AA",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#consistent-identification",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/consistent-identification.html"
+    },
+    {
+      "id": "3.2.6",
+      "level": "A",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#consistent-help",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/consistent-help.html"
+    },
+    {
+      "id": "3.3.1",
+      "level": "A",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#error-identification",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/error-identification.html"
+    },
+    {
+      "id": "3.3.2",
+      "level": "A",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#labels-or-instructions",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/labels-or-instructions.html"
+    },
+    {
+      "id": "3.3.3",
+      "level": "AA",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#error-suggestion",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/error-suggestion.html"
+    },
+    {
+      "id": "3.3.4",
+      "level": "AA",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#error-prevention-legal-financial-data",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/error-prevention-legal-financial-data.html"
+    },
+    {
+      "id": "3.3.7",
+      "level": "A",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#redundant-entry",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/redundant-entry.html"
+    },
+    {
+      "id": "3.3.8",
+      "level": "AA",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#accessible-authentication-minimum",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/accessible-authentication-minimum.html"
+    },
+    {
+      "id": "4.1.2",
+      "level": "A",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#name-role-value",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/name-role-value.html"
+    },
+    {
+      "id": "4.1.3",
+      "level": "AA",
+      "url": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/#status-messages",
+      "understandingUrl": "https://www.w3.org/WAI/WCAG22/Understanding/status-messages.html"
+    }
+  ]
+}

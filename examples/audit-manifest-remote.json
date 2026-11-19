@@ -1,0 +1,8 @@
+{
+  "projectRoot": "/absolute/path/to/empty-audit-workspace",
+  "url": "https://www.example.com/",
+  "viewport": { "width": 1280, "height": 900 },
+  "wallSeconds": 120,
+  "maxActions": 120,
+  "maxElements": 3000
+}

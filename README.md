@@ -1,6 +1,6 @@
 # a11y-agent-kit
 
-Audit your running app with the coding agent you already use. The **Bring Your Own Agent (BYOA)** MVP is available on npm as `a11y-agent-kit@0.1.1`.
+Audit your running app, or any HTTP(S) site you are authorized to test, with the coding agent you already use. The **Bring Your Own Agent (BYOA)** MVP is available on npm as `a11y-agent-kit@0.1.1`.
 
 Your agent can open a menu or dialog with Playwright, scan the rendered state with axe, and save browser records and screenshots. It can save a checkpoint before exploring another state. Share an HTML report that marks findings awaiting review and points to the original JSON records and PNGs.
 
@@ -45,6 +45,48 @@ The skill copy inside the npm 0.1.1 package still describes the earlier source-t
 
 For request examples, batch collection, and submission, see the [BYOA workflow](examples/byoa-audit.md). If your agent uses a local stdio MCP host, use `npx -y a11y-agent-kit@0.1.1 serve` as the server command. See the [MCP configuration](examples/byoa-audit.md#mcp-connection).
 
+## Audit a site you are authorized to test
+
+The kit is not limited to `localhost`. To audit a staging, production or third-party site that you own or have permission to test, use an empty workspace directory as `projectRoot` instead of a source tree, and resolve the site's canonical start URL first. By default, main-document navigation stays on the manifest origin, so an entry URL that redirects to another origin (for example `example.com` to `www.example.com`) is blocked.
+
+```sh
+npx -y playwright@1.64.1 install chromium
+mkdir -p "$HOME/a11y-audits/example-site/evidence" && cd "$HOME/a11y-audits/example-site"
+curl -sSIL --max-redirs 5 -o /dev/null -w '%{url_effective}\n' https://example.com/
+cat > evidence/audit-manifest.json <<JSON
+{
+  "projectRoot": "$(pwd -P)",
+  "url": "https://www.example.com/"
+}
+JSON
+npx -y a11y-agent-kit@0.1.1 audit evidence/audit-manifest.json --summary
+```
+
+Replace `https://www.example.com/` with the URL that `curl` printed. Keep only `evidence/` in the workspace. For an agent session, paste this prompt:
+
+```text
+Audit https://www.example.com/ for accessibility. I am authorized to test it.
+Use the workspace ~/a11y-audits/example-site and evidence/audit-manifest.json there.
+Before starting, resolve the canonical start URL with at most 5 redirects and use
+the final URL in the manifest. Read the evidence rules at
+https://github.com/szboynono/a11y-agent-kit/blob/main/skills/a11y-audit/SKILL.md
+and the remote-site guide at
+https://github.com/szboynono/a11y-agent-kit/blob/main/examples/remote-site.md
+and use the npx commands in this prompt for setup.
+Start one persistent JSONL process with
+npx -y a11y-agent-kit@0.1.1 audit-agent evidence/audit-manifest.json
+Start with snapshot and axe, then adopt bound axe candidates. Explore only pages
+on the same origin. Do not submit forms, sign in, or trigger actions with side
+effects. If navigation is blocked, report the blocked URL and stop that path.
+Read original records and view PNGs before making visual claims. Save checkpoints
+and submit the last acknowledged digest for review. Render the returned proposal
+JSON with
+npx -y a11y-agent-kit@0.1.1 audit-report REPORT.json --out evidence/a11y-report.html
+Give me the HTML, the original evidence paths, and any gaps in coverage. Audit only.
+```
+
+The kit does not crawl a site, bypass bot protection or CAPTCHAs, or sign in. On production sites, avoid actions with side effects. The source tree adds optional `followRedirects` and `allowedOrigins` manifest fields and, on a blocked navigation, an additive `navigation` field (`code: "AUDIT_NAVIGATION_BLOCKED"`) with a suggested next step next to the unchanged npm 0.1.1 error code; npm 0.1.1 does not include them. See the [remote-site guide](examples/remote-site.md).
+
 ## Review and share the evidence
 
 Open the HTML locally. A submitted proposal is `needs_review`. Use a separate reviewer to inspect the originals and submit decisions with `audit-review`. Keep the project and evidence directory in place for verification. The HTML leaves out embedded screenshots by default. See [the audit skill](skills/a11y-audit/SKILL.md) and [evidence requirements](skills/a11y-audit/references/evidence-policy-v2.md).
@@ -61,7 +103,9 @@ The kit writes reports, records, and PNGs to local disk and has no model service
 - Complex authentication and exhaustive business flows are not established.
 - Interactions can trigger side effects, so use a suitable test environment.
 - Reviewer independence is declared, not identity-verified.
-- The caller declares which URL matches the source.
+- The caller declares which URL matches the source. For a remote site, `projectRoot` is your workspace, so source freshness describes that workspace, not the live site.
+- Bot protection, CAPTCHAs, sign-in and headless-specific content are reported as observed, not bypassed.
+- The recorded workflow checks used owned loopback fixtures. Validation on real third-party sites remains open, and a third-party audit is not evidence of it.
 - The kit has no demonstrated detection advantage over axe.
 
 <a name="install"></a>

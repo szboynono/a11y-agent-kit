@@ -18,8 +18,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 5414,
-      "sha256": "bec76cdf314e8fbd206dfb9b830b747c9a3ff7d402732a4915a6c8048ad268a3"
+      "bytes": 8611,
+      "sha256": "2de8dcd45ed6ca2cc71ee06cb95943dcaf484a8fea1f78a0621f784059074fe2"
     },
     {
       "path": "THIRD_PARTY_NOTICES.md",
@@ -28,8 +28,8 @@
     },
     {
       "path": "commands/a11y-audit.md",
-      "bytes": 1571,
-      "sha256": "f156424caffe24ad41c577f244cd64ab7d5613c7cb572bd01bb85e273d24be96"
+      "bytes": 2454,
+      "sha256": "4e68a9a5bb0a75e64728f5b6586540aa34a421edcd1311a4464bd9605ad7fe1c"
     },
     {
       "path": "docs/async-collection.md",
@@ -82,6 +82,11 @@
       "sha256": "8cb61f0393c984e9638b7d06f2b76fb1f842ebbdc111a87a5446de526aa3d583"
     },
     {
+      "path": "examples/audit-manifest-remote.json",
+      "bytes": 214,
+      "sha256": "6fd87541a3b8fcb9ca73ef802ea2cd63493b8961b80f23eb308ef225fd2d1d90"
+    },
+    {
       "path": "examples/audit-manifest.json",
       "bytes": 197,
       "sha256": "8c155ab2a4e9b0e0f80c16b3f0889ad9b3d1d7a24bb1415dc9c14af652aac180"
@@ -93,8 +98,8 @@
     },
     {
       "path": "examples/byoa-audit.md",
-      "bytes": 15929,
-      "sha256": "cfd4beb8575340deaf1187edf2b9aae98bb920017659e03ed72265ba64395692"
+      "bytes": 17197,
+      "sha256": "7465a613262e03db0522423ad14810a0d91d81100accd123384f872e7157cd10"
     },
     {
       "path": "examples/codex-cli.md",
@@ -108,8 +113,8 @@
     },
     {
       "path": "examples/first-use.md",
-      "bytes": 4055,
-      "sha256": "e68d08ca0b61364a6a46b0342d9dd2c596a2615ff737c0f352cc6818fda2fcb2"
+      "bytes": 5145,
+      "sha256": "5cf4d732e0fd4ed1e47e4504aa2bb3839d60e28b751678e744c49b4f3459c316"
     },
     {
       "path": "examples/manifest.json",
@@ -117,9 +122,14 @@
       "sha256": "3182d24330861482445f284f520989d9b55f776a9f9a53d44d15e872d264d217"
     },
     {
+      "path": "examples/remote-site.md",
+      "bytes": 10720,
+      "sha256": "ae4ccfe354265185b7d12f80433560595c730074a61052438ffb22933108e934"
+    },
+    {
       "path": "llms.txt",
-      "bytes": 3130,
-      "sha256": "11e715317b427ec0a2d8d18191f44fc73a891c46e3996a8a41a4ed984dbb2331"
+      "bytes": 3599,
+      "sha256": "9038290d51e34d604ee164f2ba6b7c953c19081e8498cdaa8f43d795c24755d0"
     },
     {
       "path": "package-lock.json",
@@ -143,8 +153,8 @@
     },
     {
       "path": "skills/a11y-audit/SKILL.md",
-      "bytes": 55851,
-      "sha256": "c9cc177b9f4baac08826fe408246e4a55f3ce225bfe881e737fef3c3a005302b"
+      "bytes": 56992,
+      "sha256": "4769b93f7b3e12bc61c8b7250bed7046e71ef238fca44e2e76dce27bbefa3078"
     },
     {
       "path": "skills/a11y-audit/references/evidence-policy-v2.md",

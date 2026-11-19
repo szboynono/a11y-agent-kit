@@ -1,6 +1,6 @@
 # a11y-agent-kit
 
-> The Bring Your Own Agent (BYOA) MVP for local accessibility auditing is available on npm as `a11y-agent-kit@0.1.1`. Your coding agent explores rendered browser states with Playwright and axe, saves evidence and checkpoints, and produces HTML reports that label findings awaiting review. The audit workflow collects evidence. The kit has no model service, account, or report upload.
+> The Bring Your Own Agent (BYOA) MVP for local accessibility auditing is available on npm as `a11y-agent-kit@0.1.1`. It audits your running app or any HTTP(S) site you are authorized to test. Your coding agent explores rendered browser states with Playwright and axe, saves evidence and checkpoints, and produces HTML reports that label findings awaiting review. The audit workflow collects evidence. The kit has no model service, account, or report upload.
 
 ## Install and start
 
@@ -15,7 +15,7 @@
 
 ## Use and output
 
-1. Use the running application's HTTP(S) URL and canonical absolute project root in `evidence/audit-manifest.json`. New audits support WCAG 2.1 and 2.2 at level A or AA. The default is 2.2 AA.
+1. Use the target's HTTP(S) URL and a canonical absolute `projectRoot` in `evidence/audit-manifest.json`: your app's project root for your own app, or a dedicated, empty workspace for a deployed or third-party site you are authorized to test. For a remote site, resolve the canonical start URL first; main-document navigation stays on the manifest origin. The kit does not crawl, sign in or bypass bot protection. See the [remote-site guide](examples/remote-site.md). New audits support WCAG 2.1 and 2.2 at level A or AA. The default is 2.2 AA.
 2. Start one persistent JSONL process with `npx -y a11y-agent-kit@0.1.1 audit-agent evidence/audit-manifest.json`. Run snapshot and axe, adopt bound candidates, and explore relevant states. Read original records and view PNGs before making visual claims. Save checkpoints, then explicitly submit the last acknowledged digest. Use fixed batch collection if the host cannot keep a process open.
 3. Run `npx -y a11y-agent-kit@0.1.1 audit-report REPORT.json --out evidence/a11y-report.html` with the returned checkpoint, proposal, or reviewed report JSON. Use `--screenshots` only with permission to embed page pixels.
 4. Return the HTML and original artifact paths, counts by status, unresolved observations, and untested scope. Submissions stay `needs_review` pending separate review. Use `audit-check` to check integrity and source freshness.
@@ -25,6 +25,7 @@ WCAG conformance and real screen-reader speech remain unassessed. Evidence uses 
 ## Guides
 
 - [First use](examples/first-use.md)
+- [Remote sites](examples/remote-site.md)
 - [BYOA CLI/MCP workflow](examples/byoa-audit.md)
 - [Audit workflow](examples/audit-workflow.md)
 - [Evidence policy](skills/a11y-audit/references/evidence-policy-v2.md)

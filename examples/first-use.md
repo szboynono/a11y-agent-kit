@@ -1,6 +1,6 @@
 # Run a first local audit with your own agent
 
-Use Node.js 22.12+ and npm. Keep your application running and install the Chromium build that matches the package:
+Use Node.js 22.12+ and npm. Keep your application running and install the Chromium build that matches the package. To audit a deployed or third-party site instead, see [Audit a deployed or third-party site](#audit-a-deployed-or-third-party-site) below.
 
 ```sh
 npx -y playwright@1.64.1 install chromium
@@ -50,5 +50,17 @@ npx -y a11y-agent-kit@0.1.1 audit-inventory RETURNED_PROPOSAL.json --limit 100
 Open the HTML locally. Use `--screenshots` only if you want to embed original page pixels. Follow the [inventory continuations](../skills/a11y-audit/SKILL.md#account-for-retained-axe-observations) for all unresolved axe observations. For a large report, add `--bounded` and pass a new directory to `--out`. Open its `index.html` and keep the numbered detail pages alongside it. The [BYOA workflow](byoa-audit.md#export-a-large-html-report) describes the output limits.
 
 A submitted proposal stays `needs_review`. Use a separate reviewer to inspect the original evidence, applicability, exceptions, and scope. Supply that reviewer's decisions to `audit-review`. Only supported claims enter `confirmedFindings`. Read JSON even on a nonzero exit. `audit-check:current` verifies artifact integrity and source freshness within its contract. It leaves semantic approval and WCAG conformance unassessed.
+
+## Audit a deployed or third-party site
+
+The same commands work for any HTTP(S) site you own or are authorized to test. Three things change:
+
+- Use a dedicated, empty workspace directory as `projectRoot` and keep the manifest under its `evidence/`. Do not point `projectRoot` at an unrelated repository.
+- Resolve the canonical start URL first, for example with `curl -sSIL --max-redirs 5 -o /dev/null -w '%{url_effective}\n' https://example.com/`, and use the printed URL as `url`. Main-document navigation stays on that origin; a redirect to another origin is blocked.
+- Avoid actions with side effects on production sites. The kit does not crawl, sign in or bypass bot protection.
+
+See the [remote-site guide](remote-site.md) for declared origins, blocked-navigation details, WAF and headless behavior, and how to read the report. An audit of a third-party site is not evidence that this kit has been validated on real sites.
+
+## Keep the evidence
 
 Keep the original project and evidence tree in place. The evidence uses absolute paths and binds to the source. Review captured text, URLs, and images before letting your agent send them or sharing the report. See [source verification and test scope](https://github.com/szboynono/a11y-agent-kit/blob/main/docs/publication-boundary.md).

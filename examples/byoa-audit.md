@@ -26,7 +26,11 @@ By default `view` returns the verified original local PNG path/hash. MCP hosts c
 
 Main-document navigation stays on the manifest origin, including every HTTP redirect hop. Same-origin redirects are allowed; a redirect to another origin is blocked before contacting it. Ordinary cross-origin subresources remain outside this navigation guard; frozen network replay has its own stricter resource policy.
 
+The source tree (not npm 0.1.1) adds optional `allowedOrigins` (extra exact origins) and `followRedirects` (follow redirects to those origins and same-host `http` to `https` upgrades, at most 5 hops). A blocked navigation keeps its npm 0.1.1 error code and `details`, and adds a `navigation` field (`code: "AUDIT_NAVIGATION_BLOCKED"`) with `fromUrl`, `blockedUrl`, `redirectChain`, `reason` and an advisory `suggestedAction` in CLI JSON, JSONL and MCP. Credentials in URLs and HTTPS-to-HTTP redirects are always blocked. A public site is blocked from reaching a private address only when that address is an IP literal or a `localhost` name; a public DNS name that resolves to a private address is not detected or recorded. See the [remote-site guide](remote-site.md#4-same-origin-declared-origins-and-blocked-navigation).
+
 Use Node.js 22.12+ and npm. Run `npx -y playwright@1.64.1 install chromium` and keep your application running. Create its `evidence/` directory and save this as `evidence/audit-manifest.json`. Set `projectRoot` to the application's canonical absolute path and `url` to its running address. Generated manifests, proposals, reviews and host logs belong under that application's `evidence/`, outside its source fingerprint.
+
+For a deployed or third-party site you are authorized to test, set `projectRoot` to a dedicated, empty workspace directory and `url` to the site's resolved canonical start URL (see the [remote-site guide](remote-site.md) and [audit-manifest-remote.json](audit-manifest-remote.json)). Keep everything under that workspace's `evidence/`. The kit does not crawl, sign in or bypass bot protection; avoid side-effecting actions on production sites.
 
 ```json
 {

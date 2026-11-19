@@ -57,9 +57,11 @@ The kit writes reports, records, and PNGs to local disk and has no model service
 
 - Coverage depends on the pages, states, viewports, and budget you explore. Catalog tracking or no findings does not mean a pass.
 - DOM capture excludes iframe interiors and Shadow DOM.
+- PNGs do not establish timing or persistent focus visibility.
 - Complex authentication and exhaustive business flows are not established.
 - Interactions can trigger side effects, so use a suitable test environment.
 - Reviewer independence is declared, not identity-verified.
+- The caller declares which URL matches the source.
 - The kit has no demonstrated detection advantage over axe.
 
 <a name="install"></a>

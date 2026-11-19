@@ -4,6 +4,7 @@ import { AUDIT_PLAYBOOK, AUDIT_PLAYBOOK_TEXT, openAuditAgent, auditAgentRequestS
 import { boundAuditResponse, MCP_TEXT_LIMIT } from './projection.js';
 import { errorPayload } from './error-details.js';
 import { SWEEP_RESERVE_BYTES, SWEEP_VERSION, fitSweep } from './sweep.js';
+import { createUntrustedEnvelope, UNTRUSTED_ENVELOPE_RESERVE } from './untrusted.js';
 
 const inlineReply = Symbol('inlineReply');
 const imageOutput = z.enum(['path', 'inline']).optional();
@@ -16,6 +17,8 @@ export function registerAuditTools(server, { runtimeProfile, openAgent = openAud
     ? option.safeExtend({ actions: option.shape.actions.describe(profileGuide.trim()) }) : option)) : auditAgentRequestSchema;
   const manifestSchema = auditAgentManifestSchemaFor(runtimeProfile);
   const startupController = new AbortController();
+  // One random nonce per connection, which holds one audit session; it never reaches records, reports or evidence.
+  const untrusted = createUntrustedEnvelope();
   let agent, started = false, disconnected = false, queue = Promise.resolve();
   const serial = action => {
     const task = queue.then(action);
@@ -52,7 +55,9 @@ export function registerAuditTools(server, { runtimeProfile, openAgent = openAud
     catch (error) { value = { success: false, error: errorPayload({ code: error.code ?? 'AUDIT_MCP_ERROR', message: error.message ?? String(error), details: error.details, navigation: error.navigation }), ...(profile ? { budget: profile.budget(), complete: false } : {}) }; }
     if (profile) value = { ...value, ...(value?.budget && value.budget.authority !== 'shared-ledger' ? { nativeBudgetDiagnostic: value.budget } : {}), budget: profile.budget() };
     value = boundAuditResponse(value, MCP_TEXT_LIMIT);
-    return { content: [{ type: 'text', text: JSON.stringify(value) }, ...(image && value.success === true ? [image] : [])], structuredContent: value, isError: value.success === false };
+    // Additive envelope fields plus page-string markers; the text stays within MCP_TEXT_LIMIT.
+    const { structured, text } = untrusted.wrap(value, MCP_TEXT_LIMIT);
+    return { content: [{ type: 'text', text }, ...(image && structured.success === true ? [image] : [])], structuredContent: structured, isError: structured.success === false };
   };
   // Catch schema errors inside the bounded handler, rather than letting SDK validation echo untrusted input.
   const input = schema => ({ '~standard': { version: 1, vendor: 'a11y-bounded-input', validate: value => ({ value }), jsonSchema: { input: options => z.toJSONSchema(schema, { target: options.target }), output: options => z.toJSONSchema(schema, { target: options.target }) } } });
@@ -90,7 +95,7 @@ export function registerAuditTools(server, { runtimeProfile, openAgent = openAud
         : 'Send firstRequest to a11y_audit_request, then follow the playbook; budget is returned with every response.',
       visualAudit: 'requires_reading_original_image', imageOutput: { default: 'path', supported: ['path', 'inline'], inlineTool: 'view', ...INLINE_IMAGE_LIMITS } });
     if (!swept?.sweep) return response(null);
-    const room = MCP_TEXT_LIMIT - 512 - Buffer.byteLength(JSON.stringify(response({})));
+    const room = MCP_TEXT_LIMIT - 512 - UNTRUSTED_ENVELOPE_RESERVE - Buffer.byteLength(JSON.stringify(response({})));
     return response(fitSweep(swept.sweep, room));
   });
   const match = runId => agent && agent.runId === runId;

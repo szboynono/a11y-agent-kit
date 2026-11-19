@@ -5,7 +5,7 @@ import { mcpTransport } from './mcp-transport.js';
 import { auditAgentRequestSchema } from '../src/audit/agent.js';
 import { MCP_TEXT_LIMIT } from '../src/audit/projection.js';
 import { boundErrorIssues, errorPayload, zodIssueDetails, proposalFindingHint, DRAFT_FINDING_FIELDS, EXPECTED_FINDING, ERROR_ISSUE_LIMIT } from '../src/audit/error-details.js';
-import { fixture } from './helpers.js';
+import { fixture, unwrapEnvelopedText } from './helpers.js';
 
 async function host(t) {
   const site = await fixture(t, '<!doctype html><html lang="en"><title>Audit</title><main><button id="unnamed"></button><button id="other"></button></main></html>');
@@ -16,7 +16,7 @@ async function host(t) {
   const call = async (name, args) => {
     const response = await client.callTool({ name, arguments: args });
     assert.ok(Buffer.byteLength(response.content[0].text) <= MCP_TEXT_LIMIT);
-    assert.deepEqual(JSON.parse(response.content[0].text), response.structuredContent);
+    assert.deepEqual(unwrapEnvelopedText(response), response.structuredContent);
     return response.structuredContent;
   };
   const start = await call('a11y_audit_start', { manifest: { projectRoot: site.projectRoot, url: site.url } });

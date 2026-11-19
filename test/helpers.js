@@ -68,3 +68,18 @@ export async function fixture(t, initial = html()) {
     beforeResponse: callback => { beforeResponse = callback; },
   };
 }
+
+/**
+ * MCP audit text carries the untrusted page-content envelope: page strings sit between the session's open and close
+ * markers. Strip complete marker pairs; for fixtures without marker look-alikes the result equals structuredContent.
+ */
+export function unwrapEnvelopedText(response) {
+  const { open, close } = response.structuredContent.untrustedContent;
+  const strip = value => {
+    if (typeof value === 'string') return value.startsWith(open) && value.endsWith(close) ? value.slice(open.length, -close.length) : value;
+    if (Array.isArray(value)) return value.map(strip);
+    if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, key === 'untrustedContent' ? item : strip(item)]));
+    return value;
+  };
+  return strip(JSON.parse(response.content[0].text));
+}

@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { deflateSync } from 'node:zlib';
 import { Client } from '@modelcontextprotocol/client';
 import { mcpTransport } from './mcp-transport.js';
-import { fixture } from './helpers.js';
+import { fixture, unwrapEnvelopedText } from './helpers.js';
 import { readInlineOriginal, INLINE_IMAGE_LIMITS } from '../src/audit/mcp-image.js';
 const sha = b => createHash('sha256').update(b).digest('hex');
 async function host(t, html, fault) {
@@ -20,7 +20,7 @@ async function host(t, html, fault) {
   const call = async (name, args) => {
     const r = await client.callTool({ name, arguments: args });
     assert.ok(Buffer.byteLength(r.content[0].text) <= 65536);
-    assert.deepEqual(JSON.parse(r.content[0].text), r.structuredContent);
+    assert.deepEqual(unwrapEnvelopedText(r), r.structuredContent);
     return r;
   };
   const start = (await call('a11y_audit_start', { manifest: { projectRoot: site.projectRoot, url: site.url, startupAxe: false } })).structuredContent;

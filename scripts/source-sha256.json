@@ -18,8 +18,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 8611,
-      "sha256": "2de8dcd45ed6ca2cc71ee06cb95943dcaf484a8fea1f78a0621f784059074fe2"
+      "bytes": 10127,
+      "sha256": "c7ead304c3551bece5a260cee94a4a7cf07099e55f89b53df9ea643b2edd3c77"
     },
     {
       "path": "THIRD_PARTY_NOTICES.md",
@@ -58,8 +58,8 @@
     },
     {
       "path": "examples/agent-workflow.md",
-      "bytes": 3766,
-      "sha256": "a508fc10ee33dfe0dc95e0a36a1fc9224a4b654b058b726ef55f3c7bd463c811"
+      "bytes": 3946,
+      "sha256": "5277ed1728cdfd46bd059ab736e48eaf4f15dbacec53e9b04750650fbdb18bf3"
     },
     {
       "path": "examples/audit-agent-manifest.json",
@@ -153,8 +153,8 @@
     },
     {
       "path": "skills/a11y-audit/SKILL.md",
-      "bytes": 56992,
-      "sha256": "4769b93f7b3e12bc61c8b7250bed7046e71ef238fca44e2e76dce27bbefa3078"
+      "bytes": 57998,
+      "sha256": "4d474b005c2e4f2b330aa7230dc1c3cfea5b0548d4e4f36232292c432a28fd48"
     },
     {
       "path": "skills/a11y-audit/references/evidence-policy-v2.md",
@@ -173,8 +173,8 @@
     },
     {
       "path": "src/audit/agent.js",
-      "bytes": 60716,
-      "sha256": "f88fa170a0b65af0ec30068a854d1846856483dcc8345093ef5978d37eb35417"
+      "bytes": 61515,
+      "sha256": "5ced6a76b0e3236d60959900e8a992cbe1872680a97c9347c2900a06baade847"
     },
     {
       "path": "src/audit/axe-candidates.js",
@@ -238,8 +238,8 @@
     },
     {
       "path": "src/audit/mcp.js",
-      "bytes": 11840,
-      "sha256": "7368f3cedd82a4b4350f6e3839765d1201cabbddde0554f7f36fe0771ae303c1"
+      "bytes": 12278,
+      "sha256": "4eff343885e9da89ef9e1083fe387e259ae01f4db7f4554b9bc0754521692550"
     },
     {
       "path": "src/audit/navigation.js",
@@ -320,6 +320,11 @@
       "path": "src/audit/sweep.js",
       "bytes": 13064,
       "sha256": "4e9f2e6e52a9b9de1a08535ffe7bc05c9e13ebfd269362c885c36ea49fc495ac"
+    },
+    {
+      "path": "src/audit/untrusted.js",
+      "bytes": 8836,
+      "sha256": "6f5e392badcdbcdb8a0c9da402e4e89b48719165ac659dbb79d4d8ac97e47797"
     },
     {
       "path": "src/cli.js",
@@ -453,8 +458,8 @@
     },
     {
       "path": "test/audit-mcp-image.test.js",
-      "bytes": 10534,
-      "sha256": "23e5b5762b128252b82b2dc5c46904841c03de04754f13007d3399b34222e31c"
+      "bytes": 10548,
+      "sha256": "9e2a593a2e79ee8cdde04d2c762bf268bbedc9460e9d31c8da53fd51e01f1845"
     },
     {
       "path": "test/audit-mcp-listing.test.js",
@@ -463,8 +468,8 @@
     },
     {
       "path": "test/audit-mcp.test.js",
-      "bytes": 32022,
-      "sha256": "408a67e4bb9a76c90ae6b44de1b40be23cbb88d1644d1e6f032365c49bd5e79c"
+      "bytes": 32036,
+      "sha256": "f044dc6ff97f98bf8c295bc753395985267ddfd07c71d8b175e57faad2cd1fa7"
     },
     {
       "path": "test/audit-navigation.test.js",
@@ -552,9 +557,14 @@
       "sha256": "5fac051438f019c59ef4d214418654fa30776933fa22b78a96753db97db00086"
     },
     {
+      "path": "test/audit-untrusted-envelope.test.js",
+      "bytes": 16724,
+      "sha256": "7bc4d42d376fed43e02f5d1bf2f3d44a3ffe106605e7a39541ce243be6e7bab5"
+    },
+    {
       "path": "test/audit-validation-errors.test.js",
-      "bytes": 9256,
-      "sha256": "378c7fd72c255fa0ce9d1943b0aae8dc2f6bcae44c8bf3665a9b90c4073d7b73"
+      "bytes": 9270,
+      "sha256": "c217975c3819f1fcae96e2f483345e48588b022e7e7d19cfd7409864f0961cc3"
     },
     {
       "path": "test/cli-summary.test.js",
@@ -573,8 +583,8 @@
     },
     {
       "path": "test/helpers.js",
-      "bytes": 3202,
-      "sha256": "350f94049b3fcc3dddf15671a9f471b418ab7491d46b8816e8ed4b024bc6da33"
+      "bytes": 4038,
+      "sha256": "c37c35c0f3fd0331bc701cfa698dfdc08440a358ac21a92a7184565bcd260871"
     },
     {
       "path": "test/interface.test.js",

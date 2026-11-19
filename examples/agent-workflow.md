@@ -27,7 +27,7 @@ npx -y a11y-agent-kit@0.1.1 check /absolute/path/to/verification-report.json --s
 
 The optional MCP entrypoint is `npx -y a11y-agent-kit@0.1.1 serve`, exposing `a11y_analyze`, `a11y_verify` and `a11y_check_evidence` from a local child process. Configure it only if the host needs stdio MCP. Published input schemas are the authoritative argument shapes.
 
-Check the MCP result's `isError` before consuming it. Tool execution returns JSON text plus `structuredContent`; the SDK's input-schema rejection uses the standard MCP error envelope with explanatory text and may omit `structuredContent`. Do not assume every text content block is JSON.
+Check the MCP result's `isError` before consuming it. Tool execution returns JSON text plus `structuredContent`; the SDK's input-schema rejection uses the standard MCP error envelope with explanatory text and may omit `structuredContent`. Do not assume every text content block is JSON. In `a11y_audit_*` results, the JSON text wraps page strings in the `untrustedContent.open` and `close` markers (see `untrustedFields`); read exact values from `structuredContent`.
 
 ## Deliver the result
 

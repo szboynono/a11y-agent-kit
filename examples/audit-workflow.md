@@ -2,7 +2,7 @@
 
 For the current bounded `audit-agent` transport, durable checkpoints and generic host setup, start with the [BYOA workflow](byoa-audit.md). The `audit-live` route below is the older action-per-line interface.
 
-Set up Node.js and matching Chromium as described in [first use](first-use.md). Load the [audit skill](https://github.com/szboynono/a11y-agent-kit/blob/v0.1.1/skills/a11y-audit/SKILL.md) in your agent, or read it from the installed package. Keep the site running and use the target project's canonical absolute path in the [manifest](audit-manifest.json). Save input files below the target's `evidence/` directory.
+Set up Node.js and matching Chromium as described in [first use](first-use.md). Load the [audit skill](../skills/a11y-audit/SKILL.md) in your agent. The copy inside the npm 0.1.1 package still describes the earlier source-tree setup, so use the npx commands in these guides for setup. Keep the site running and use the target project's canonical absolute path in the [manifest](audit-manifest.json). Save input files below the target's `evidence/` directory.
 
 ```sh
 npx -y a11y-agent-kit@0.1.1 audit /absolute/site/evidence/audit-manifest.json --summary

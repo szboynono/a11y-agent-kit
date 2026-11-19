@@ -18,8 +18,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 4541,
-      "sha256": "cfef3170b2f18a1678ce1e13e60c69906a0129025e004da242baa6c7139c7399"
+      "bytes": 5299,
+      "sha256": "2d3fbaacd5f9cd48e79e83ccc292272e16b5114790574e6c6ad2d68d84d16b3d"
     },
     {
       "path": "THIRD_PARTY_NOTICES.md",
@@ -88,18 +88,18 @@
     },
     {
       "path": "examples/audit-workflow.md",
-      "bytes": 3745,
-      "sha256": "c08775ae8c965511a0cac0bbc91ef2e15404c2c6072b5dccf1bbbd60a4970d70"
+      "bytes": 3789,
+      "sha256": "59db743d81dfa0e8b449e96cd86010597bdcbd3c3706898e3a1f3209b50de292"
     },
     {
       "path": "examples/byoa-audit.md",
-      "bytes": 15936,
-      "sha256": "83c9c74c5bcf4002e0877650ea6f10c66b52aa033b1cf865a7a09a8ee16bce32"
+      "bytes": 15929,
+      "sha256": "cfd4beb8575340deaf1187edf2b9aae98bb920017659e03ed72265ba64395692"
     },
     {
       "path": "examples/codex-cli.md",
-      "bytes": 796,
-      "sha256": "ac7bdeea5e459dd47a314def54a0cdf4fbe4e4fc1b80bd05d4aec4254595f86a"
+      "bytes": 733,
+      "sha256": "98d25bf8047e281d8b65a38976315808d2cb9fb33c7fb867bed9c74eacda4e00"
     },
     {
       "path": "examples/codex-mcp.md",
@@ -108,8 +108,8 @@
     },
     {
       "path": "examples/first-use.md",
-      "bytes": 4002,
-      "sha256": "7fcbc40f695deebe90f1d0a3d562fef7cc17c7f9ccb150a681492eff41785fb8"
+      "bytes": 4055,
+      "sha256": "e68d08ca0b61364a6a46b0342d9dd2c596a2615ff737c0f352cc6818fda2fcb2"
     },
     {
       "path": "examples/manifest.json",
@@ -118,8 +118,8 @@
     },
     {
       "path": "llms.txt",
-      "bytes": 3084,
-      "sha256": "253416d73c15ec7f36237ebbea73743761fe76e6d448ac0e555f14fc5c8e3411"
+      "bytes": 3130,
+      "sha256": "11e715317b427ec0a2d8d18191f44fc73a891c46e3996a8a41a4ed984dbb2331"
     },
     {
       "path": "package-lock.json",

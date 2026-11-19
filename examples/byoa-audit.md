@@ -39,7 +39,7 @@ Use Node.js 22.12+ and npm. Run `npx -y playwright@1.64.1 install chromium` and 
 }
 ```
 
-Start with the [prompt for your agent](../README.md#copy-this-to-your-agent). Use the [published audit skill](https://github.com/szboynono/a11y-agent-kit/blob/v0.1.1/skills/a11y-audit/SKILL.md) or read `skills/a11y-audit/SKILL.md` in the installed package.
+Start with the [prompt for your agent](../README.md#copy-this-to-your-agent). Use the [audit skill](../skills/a11y-audit/SKILL.md). The copy inside the npm 0.1.1 package still describes the earlier source-tree setup, so use the npx commands in these guides for setup.
 
 New audit manifests accept optional `standard: {version: "2.1" | "2.2", targetLevel: "A" | "AA"}`. New collections default to **2.2 AA / 55 criteria** (31 A, 24 AA); 2.1 AA has 50, 2.1 A has 30, and 2.2 A has 31. Other versions and AAA are rejected. The same manifest works in CLI, MCP and audit-agent. Reports retain the normalized selection and catalog digest; historical reports without a selection remain original 2.1 AA, without upgrading their target or rewriting their bytes. Legacy v0 analyze/verify/check remains 2.1 AA. Ordinary website requests can reach external resources. Local artifact storage and absence of a product model API do not imply an offline browser or prevent your host from sending content to its configured model.
 
@@ -158,5 +158,5 @@ checkpoint digests. The review decision is synthetic. The MCP smoke sends five
 request types (`step`, `read`, `view`, `checkpoint` and `submit`).
 `inventory` is outside this smoke. For `view`, the script checks that the
 returned local PNG file is nonempty. See
-[source verification and earlier archive test scope](https://github.com/szboynono/a11y-agent-kit/blob/v0.1.1/docs/publication-boundary.md) for the static verifier
+[source verification and test scope](https://github.com/szboynono/a11y-agent-kit/blob/main/docs/publication-boundary.md) for the static verifier
 and the limits of this exercise.

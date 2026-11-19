@@ -1,6 +1,6 @@
 # Codex local trial
 
-For a first audit with your existing GPT/Codex agent, follow [first use](first-use.md). Use the pinned npm CLI and the [published audit skill](https://github.com/szboynono/a11y-agent-kit/blob/v0.1.1/skills/a11y-audit/SKILL.md) in your existing session.
+For a first audit with your existing GPT/Codex agent, follow [first use](first-use.md). Use the pinned npm CLI and the [audit skill](../skills/a11y-audit/SKILL.md) in your existing session.
 
 ## Source transport check
 

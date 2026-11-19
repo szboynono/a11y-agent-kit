@@ -10,7 +10,7 @@
 
 ## Skills
 
-- [a11y-audit](skills/a11y-audit/SKILL.md) covers evidence collection, checkpoints, submission, separate review, and HTML delivery. Read the [published copy](https://github.com/szboynono/a11y-agent-kit/blob/v0.1.1/skills/a11y-audit/SKILL.md) or the skill in the installed package. Use the npm commands above for setup.
+- [a11y-audit](skills/a11y-audit/SKILL.md) covers evidence collection, checkpoints, submission, separate review, and HTML delivery. Read the [current copy](https://github.com/szboynono/a11y-agent-kit/blob/main/skills/a11y-audit/SKILL.md). The copy inside the npm 0.1.1 package still describes the earlier source-tree setup, so use the npm commands above for setup.
 - [a11y-fix-loop](skills/a11y-fix-loop/SKILL.md) covers the historical, limited analyze/edit/verify/check workflow for button-name, label, and aria-valid-attr.
 
 ## Use and output

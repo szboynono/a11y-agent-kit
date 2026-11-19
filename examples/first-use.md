@@ -27,7 +27,7 @@ Open the JSON file at the returned `reportPath`. The default plan takes a bounde
 
 ## Let your agent explore more states
 
-Paste the [README prompt](../README.md#copy-this-to-your-agent) into your coding-agent session. The agent can read the [published audit skill](https://github.com/szboynono/a11y-agent-kit/blob/v0.1.1/skills/a11y-audit/SKILL.md) or the copy at `skills/a11y-audit/SKILL.md` in the installed package. Start a new adaptive session with the same manifest and keep stdin open.
+Paste the [README prompt](../README.md#copy-this-to-your-agent) into your coding-agent session. The agent can read the [audit skill](../skills/a11y-audit/SKILL.md). The copy inside the npm 0.1.1 package still describes the earlier source-tree setup, so use the npx commands in this guide for setup. Only a new npm version can update that copy. Start a new adaptive session with the same manifest and keep stdin open.
 
 ```sh
 npx -y a11y-agent-kit@0.1.1 audit-agent evidence/audit-manifest.json
@@ -51,4 +51,4 @@ Open the HTML locally. Use `--screenshots` only if you want to embed original pa
 
 A submitted proposal stays `needs_review`. Use a separate reviewer to inspect the original evidence, applicability, exceptions, and scope. Supply that reviewer's decisions to `audit-review`. Only supported claims enter `confirmedFindings`. Read JSON even on a nonzero exit. `audit-check:current` verifies artifact integrity and source freshness within its contract. It leaves semantic approval and WCAG conformance unassessed.
 
-Keep the original project and evidence tree in place. The evidence uses absolute paths and binds to the source. Review captured text, URLs, and images before letting your agent send them or sharing the report. See [earlier archive test scope](https://github.com/szboynono/a11y-agent-kit/blob/v0.1.1/docs/publication-boundary.md).
+Keep the original project and evidence tree in place. The evidence uses absolute paths and binds to the source. Review captured text, URLs, and images before letting your agent send them or sharing the report. See [source verification and test scope](https://github.com/szboynono/a11y-agent-kit/blob/main/docs/publication-boundary.md).

@@ -6,14 +6,14 @@ Your agent can open a menu or dialog with Playwright, scan the rendered state wi
 
 ## Run your first audit from npm
 
-Use Node.js 22.12+ and npm. Start your app. In a POSIX shell at its project root, install matching Playwright Chromium and run the npm package to collect evidence. Set `projectRoot` to the output of `pwd -P` and `url` to your running app's address in the manifest below.
+Use Node.js 22.12+ and npm. Start your app. Run the block below in a POSIX shell from your app's project root. It installs matching Playwright Chromium, writes a manifest whose `projectRoot` is the output of `pwd -P`, and runs the npm package to collect evidence. If your app runs at another address, change `url` before the last command.
 
 ```sh
 npx -y playwright@1.64.1 install chromium
 mkdir -p evidence
-cat > evidence/audit-manifest.json <<'JSON'
+cat > evidence/audit-manifest.json <<JSON
 {
-  "projectRoot": "/absolute/application",
+  "projectRoot": "$(pwd -P)",
   "url": "http://127.0.0.1:3000/"
 }
 JSON
@@ -29,7 +29,8 @@ Paste this into the coding agent you already use, with the same project and mani
 ```text
 Audit my running localhost app using evidence/audit-manifest.json in this project.
 Read the evidence rules at
-https://github.com/szboynono/a11y-agent-kit/blob/v0.1.1/skills/a11y-audit/SKILL.md
+https://github.com/szboynono/a11y-agent-kit/blob/main/skills/a11y-audit/SKILL.md
+and use the npx commands in this prompt for setup.
 Start one persistent JSONL process with
 npx -y a11y-agent-kit@0.1.1 audit-agent evidence/audit-manifest.json
 Start with snapshot and axe, then adopt bound axe candidates. Open a relevant
@@ -40,6 +41,8 @@ npx -y a11y-agent-kit@0.1.1 audit-report REPORT.json --out evidence/a11y-report.
 Give me the HTML, the original evidence paths, and any gaps in coverage. Audit only.
 ```
 
+The skill copy inside the npm 0.1.1 package still describes the earlier source-tree setup. Use the npx commands in this README for setup. Only a new npm version can update that copy.
+
 For request examples, batch collection, and submission, see the [BYOA workflow](examples/byoa-audit.md). If your agent uses a local stdio MCP host, use `npx -y a11y-agent-kit@0.1.1 serve` as the server command. See the [MCP configuration](examples/byoa-audit.md#mcp-connection).
 
 ## Review and share the evidence
@@ -49,6 +52,15 @@ Open the HTML locally. A submitted proposal is `needs_review`. Use a separate re
 The default workflow collects evidence for the states you explore. WCAG conformance remains unassessed, and browser ARIA data cannot tell you what a screen reader actually says.
 
 The kit writes reports, records, and PNGs to local disk and has no model service, account, or report upload. Use your agent's settings to control what it shares with its provider. The browser connects to the target and its resources. Check captured text, URLs, and screenshots before sharing them.
+
+## Limits
+
+- Coverage depends on the pages, states, viewports, and budget you explore. Catalog tracking or no findings does not mean a pass.
+- DOM capture excludes iframe interiors and Shadow DOM.
+- Complex authentication and exhaustive business flows are not established.
+- Interactions can trigger side effects, so use a suitable test environment.
+- Reviewer independence is declared, not identity-verified.
+- The kit has no demonstrated detection advantage over axe.
 
 <a name="install"></a>
 

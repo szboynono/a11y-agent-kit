@@ -128,8 +128,8 @@
     },
     {
       "path": "examples/remote-site.md",
-      "bytes": 18500,
-      "sha256": "af1ddb1071fac0b6846757f5c5fac9da17af92902384b5466d65af91b5e9acab"
+      "bytes": 18547,
+      "sha256": "3074bf2bd380caefe50664cfa6c6c53695fb781d6c067ce3d86274c7549f9dd7"
     },
     {
       "path": "llms.txt",
@@ -248,8 +248,8 @@
     },
     {
       "path": "src/audit/navigation.js",
-      "bytes": 30710,
-      "sha256": "359731f89e22b258f04850693c9ee6a1d709ba2df2e9350c8a76b291afae0d3c"
+      "bytes": 31180,
+      "sha256": "2e9dc21550d1182dbaa2b157dd6f7f4c26cd18183fbaf1653efbef6d65dfb8c9"
     },
     {
       "path": "src/audit/network-replay.js",
@@ -483,8 +483,8 @@
     },
     {
       "path": "test/audit-navigation-dns.test.js",
-      "bytes": 70839,
-      "sha256": "ab6e2f770b30ff41bfe6e98fee4d419c350dc55da7895e1c8b9b5e3c4da8cb0f"
+      "bytes": 74964,
+      "sha256": "2a24a82cd55ed417d0f88a3b6830d1c5a4ebe100944ed379cb42efe6ad1d13dd"
     },
     {
       "path": "test/audit-navigation.test.js",

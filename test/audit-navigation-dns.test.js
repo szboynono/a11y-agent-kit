@@ -16,7 +16,7 @@ import { parseAuditManifest } from '../src/audit/schema.js';
 import { errorPayload } from '../src/audit/error-details.js';
 import { errorRecord } from '../src/evidence.js';
 import {
-  boundNavigationDetails, classifyAddress, CLOUD_METADATA_ADDRESSES, decideNavigation, DNS_FAILED_HOST_LIMIT, DNS_LOOKUP_TIMEOUT_MS, DNS_NAVIGATION_WAIT_MS, dnsCheckSummary,
+  boundNavigationDetails, classifyAddress, CLOUD_METADATA_ADDRESSES, decideNavigation, DNS_FAILED_HOST_LIMIT, DNS_LOOKUP_TIMEOUT_MS, DNS_MIN_LOOKUP_WAIT_MS, DNS_NAVIGATION_WAIT_MS, dnsCheckSummary,
   DNS_BRIEF_MAX_BYTES, dnsCheckBrief,
   FLOOR_REASONS, isCloudMetadataHost, isPrivateHost, navigationBlockDetails, navigationPolicy, resolutionHost, resolveNavigationTarget, startSession, systemHostResolver,
 } from '../src/audit/navigation.js';
@@ -618,6 +618,51 @@ test('DNS guard MJ-1: with a hanging resolver, a click and a navigate through cr
     ['audit-browser-start', 'slow.example', 'LOOKUP_TIMEOUT'], ['click', 'hop.example', 'LOOKUP_TIMEOUT'], ['click', 'hop2.example', 'LOOKUP_BUDGET_EXHAUSTED'],
     ['navigate', 'nav.example', 'LOOKUP_TIMEOUT'], ['navigate', 'nav2.example', 'LOOKUP_BUDGET_EXHAUSTED']]);
   assert.match(dnsCheck.note, /not looked up again/);
+});
+
+test('DNS guard MJ-1: a navigation wait with less than DNS_MIN_LOOKUP_WAIT_MS left counts as used up, without a lookup', async () => {
+  // Deterministic inputs only: the resolver answers at once, so no test timer decides the outcome.
+  const { resolver, calls } = tableResolver({ 'hop2.example': ['8.8.8.8'] });
+  const failedHosts = new Map();
+  const exhausted = { allowed: true, degraded: true, skipped: 'budget_exhausted', resolution: { host: 'hop2.example', resolver: 'test-table', addresses: [], error: 'LOOKUP_BUDGET_EXHAUSTED' } };
+  // A sliver left by a timer that fired a little early, measured with performance.now(), is not worth a lookup.
+  for (const waitMs of [-1, 0, 0.4, 1, DNS_MIN_LOOKUP_WAIT_MS - 0.001, Number.NaN]) {
+    assert.deepEqual(await resolveNavigationTarget({ url: 'https://hop2.example/', policy: publicPolicy, resolver, waitMs, failedHosts }), exhausted, `waitMs ${waitMs}`);
+  }
+  assert.deepEqual(calls, [], 'no lookup with less than the minimum wait left');
+  assert.equal(failedHosts.size, 0, 'a host that was not tried is not remembered');
+  // From the minimum up, the host is looked up as before; a short explicit timeoutMs is not affected.
+  for (const options of [{ waitMs: DNS_MIN_LOOKUP_WAIT_MS }, { waitMs: DNS_NAVIGATION_WAIT_MS }, {}, { timeoutMs: 5 }]) {
+    const answered = await resolveNavigationTarget({ url: 'https://hop2.example/', policy: publicPolicy, resolver, failedHosts, ...options });
+    assert.deepEqual([answered.allowed, answered.degraded, answered.resolution.addresses.map(item => item.address)], [true, undefined, ['8.8.8.8']], JSON.stringify(options));
+  }
+  assert.deepEqual(calls, Array(4).fill('hop2.example'));
+  assert.ok(DNS_MIN_LOOKUP_WAIT_MS > 0 && DNS_MIN_LOOKUP_WAIT_MS < DNS_NAVIGATION_WAIT_MS);
+});
+
+test('DNS guard MJ-1: a redirect hop whose navigation has less than DNS_MIN_LOOKUP_WAIT_MS of its DNS wait left is skipped and listed', async () => {
+  // The cross-host case without real waiting: the chain records the wait its first hop used, as measured with
+  // performance.now() when the 2 s timer fired slightly early, and the next hop is screened directly (no browser).
+  const { resolver, calls } = tableResolver({ 'nav2.example': ['8.8.8.8'] });
+  const browser = new AuditBrowser(parseAuditManifest({ projectRoot: '/tmp', url: 'https://start.example/', followRedirects: true,
+    allowedOrigins: ['https://nav.example', 'https://nav2.example'] }), { launchArgs, hostResolver: resolver });
+  browser.startClassified = true; browser.navigationStage = 'navigate';
+  const redirect = (from, requestId, used) => {
+    const chain = { seq: ++browser.chainSeq, networkId: `net-${requestId}`, stage: 'navigate', hops: [{ url: 'https://nav.example/n', status: null }], dnsWaitMs: used };
+    browser.navigationChains.push(chain); browser.chainByInterception.set(from, chain);
+    return { requestId, redirectedRequestId: from, networkId: chain.networkId, request: { url: 'https://nav2.example/z' } };
+  };
+  for (const used of [DNS_NAVIGATION_WAIT_MS - 0.4, DNS_NAVIGATION_WAIT_MS - DNS_MIN_LOOKUP_WAIT_MS + 0.001, DNS_NAVIGATION_WAIT_MS]) {
+    const screened = await browser.screenMainFrameRequest(redirect(`first-${used}`, `next-${used}`, used));
+    assert.deepEqual([screened.allowed, screened.skipped, screened.resolution.error], [true, 'budget_exhausted', 'LOOKUP_BUDGET_EXHAUSTED'], `used ${used}`);
+  }
+  assert.deepEqual(calls, [], 'no lookup for a hop past its navigation\'s DNS wait');
+  // With exactly the minimum left, the hop is still looked up.
+  const looked = await browser.screenMainFrameRequest(redirect('first-min', 'next-min', DNS_NAVIGATION_WAIT_MS - DNS_MIN_LOOKUP_WAIT_MS));
+  assert.deepEqual([looked.allowed, looked.degraded, calls], [true, undefined, ['nav2.example']]);
+  const { dnsCheck } = browser.navigationReport();
+  assert.deepEqual([dnsCheck.status, dnsCheck.lookups, dnsCheck.failedLookups, dnsCheck.skippedLookups], ['degraded', 1, 0, 3]);
+  assert.deepEqual(dnsCheck.failures, Array(3).fill({ stage: 'navigate', host: 'nav2.example', error: 'LOOKUP_BUDGET_EXHAUSTED' }));
 });
 
 // ---------- m-1: a start answer with both public and private addresses ----------

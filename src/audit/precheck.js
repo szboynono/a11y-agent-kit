@@ -7,6 +7,8 @@
  * re-check. When a needed fact was not recorded, the rule abstains instead of guessing.
  */
 
+import { stableSelectorIndex } from './stable-selector.js';
+
 export const PRECHECK_VERSION = 'precheck-1';
 export const PRECHECK_INSTRUCTION = 'Advisory only: notes never block, change, drop or confirm a finding. For each noted finding, add evidence that answers the note, revise the claim, or withdraw it before submit.';
 const MAX_LISTED_NOTES = 20;
@@ -402,6 +404,88 @@ export function precheckSession(finding, records, index = sessionIndex(records))
   return notes;
 }
 
+// ---- Suspected duplicates: advisory grouping across findings; never merges, drops or blocks. ----
+
+export const DUPLICATE_RULE = 'suspected-duplicate';
+export const DUPLICATE_INSTRUCTION = 'Advisory only: each group lists findings with the same criterionId, the same recorded stateId and the same target (the same nodeId or the same stableSelector). They may describe one issue. Nothing was merged, dropped or blocked, and review outcomes and counts are unchanged. Keep distinct claims, or merge or withdraw repeats yourself before submit.';
+const MAX_DUPLICATE_GROUPS = 10, MAX_DUPLICATE_BYTES = 2000, MAX_GROUP_IDS = 10;
+
+/**
+ * Groups of two or more rows `{ findingId, criterionId, stateId, nodeId, stableSelector? }` that share criterionId and
+ * stateId and are joined by a shared nodeId or stableSelector. Rows without a stateId, or with neither target key, are
+ * skipped. Groups and their IDs keep input order.
+ */
+export function suspectedDuplicateGroups(rows) {
+  const buckets = new Map();
+  (Array.isArray(rows) ? rows : []).forEach((row, index) => {
+    if (typeof row?.findingId !== 'string' || typeof row.criterionId !== 'string' || typeof row.stateId !== 'string' || !row.stateId) return;
+    const keys = [typeof row.nodeId === 'string' && row.nodeId ? `nodeId|${row.nodeId}` : null,
+      typeof row.stableSelector === 'string' && row.stableSelector ? `stableSelector|${row.stableSelector}` : null].filter(Boolean);
+    if (!keys.length) return;
+    const bucket = JSON.stringify([row.criterionId, row.stateId]);
+    if (!buckets.has(bucket)) buckets.set(bucket, []);
+    buckets.get(bucket).push({ row, index, keys });
+  });
+  const groups = [];
+  for (const members of buckets.values()) {
+    if (members.length < 2) continue;
+    const parent = members.map((_, i) => i), first = new Map(), shared = members.map(() => new Set());
+    const find = i => { while (parent[i] !== i) i = parent[i] = parent[parent[i]]; return i; };
+    members.forEach((member, i) => {
+      for (const key of member.keys) {
+        if (!first.has(key)) { first.set(key, i); continue; }
+        const j = first.get(key);
+        shared[i].add(key); shared[j].add(key);
+        const [a, b] = [find(i), find(j)];
+        if (a !== b) parent[Math.max(a, b)] = Math.min(a, b);
+      }
+    });
+    const clusters = new Map();
+    members.forEach((member, i) => { const root = find(i); if (!clusters.has(root)) clusters.set(root, []); clusters.get(root).push(i); });
+    for (const cluster of clusters.values()) {
+      if (cluster.length < 2) continue;
+      const keys = new Set(cluster.flatMap(i => [...shared[i]]));
+      const selectors = [...new Set(cluster.map(i => members[i].row.stableSelector).filter(value => typeof value === 'string' && value))];
+      const { criterionId, stateId } = members[cluster[0]].row;
+      groups.push({ index: members[cluster[0]].index, criterionId, stateId,
+        matchedBy: ['nodeId', 'stableSelector'].filter(kind => [...keys].some(key => key.startsWith(`${kind}|`))),
+        ...(selectors.length === 1 && cluster.every(i => members[i].row.stableSelector === selectors[0]) ? { stableSelector: selectors[0] } : {}),
+        nodeIds: [...new Set(cluster.map(i => members[i].row.nodeId).filter(value => typeof value === 'string' && value))],
+        findingIds: cluster.map(i => members[i].row.findingId) });
+    }
+  }
+  return groups.sort((a, b) => a.index - b.index).map(({ index: _index, ...group }) => group);
+}
+
+/** Target rows for duplicate grouping, from the finding target and the session's own records only. */
+function duplicateRows(findings, records) {
+  const byId = new Map(records.map(record => [record?.evidenceId, record])), stable = stableSelectorIndex(records);
+  return findings.map(finding => {
+    const record = byId.get(finding?.target?.evidenceId);
+    const selector = record ? stable.fieldsFor(finding.target).stableSelector : undefined;
+    return { findingId: finding?.id, criterionId: finding?.criterionId, stateId: record?.after?.stateId, nodeId: finding?.target?.nodeId,
+      ...(typeof selector === 'string' ? { stableSelector: selector } : {}) };
+  });
+}
+
+/** Bounded ACK section, or null when no group was found. A failure here is reported without touching the other notes. */
+function duplicateSection(findings, records) {
+  let groups;
+  try { groups = suspectedDuplicateGroups(duplicateRows(findings, records)); }
+  catch { return { rule: DUPLICATE_RULE, advisory: true, unavailable: true, instruction: DUPLICATE_INSTRUCTION }; }
+  if (!groups.length) return null;
+  const listed = [];
+  let bytes = 0;
+  for (const group of groups) {
+    const row = group.findingIds.length > MAX_GROUP_IDS ? { ...group, findingIds: group.findingIds.slice(0, MAX_GROUP_IDS), findingCount: group.findingIds.length } : group;
+    const size = Buffer.byteLength(JSON.stringify(row));
+    if (listed.length >= MAX_DUPLICATE_GROUPS || bytes + size > MAX_DUPLICATE_BYTES) break;
+    listed.push(row); bytes += size;
+  }
+  return { rule: DUPLICATE_RULE, advisory: true, groupsFound: groups.length, groups: listed,
+    ...(groups.length > listed.length ? { omittedGroups: groups.length - listed.length } : {}), instruction: DUPLICATE_INSTRUCTION };
+}
+
 /** Precheck a validated proposal against the session records; returns a bounded, advisory ACK section. */
 export function precheckProposal(proposal, records) {
   const findings = Array.isArray(proposal?.findings) ? proposal.findings : [];
@@ -422,7 +506,9 @@ export function precheckProposal(proposal, records) {
     if (listed.length >= MAX_LISTED_NOTES || bytes + size > MAX_LISTED_BYTES) break;
     listed.push(note); bytes += size;
   }
+  const duplicates = duplicateSection(findings, Array.isArray(records) ? records : []);
   return { version: PRECHECK_VERSION, advisory: true, checkedFindings: findings.length, findingsWithNotes: new Set(notes.map(note => note.findingId)).size,
     ...(abstained ? { targetsUnavailable: abstained } : {}), notes: listed,
-    ...(notes.length > listed.length ? { omittedNotes: notes.length - listed.length } : {}), instruction: PRECHECK_INSTRUCTION };
+    ...(notes.length > listed.length ? { omittedNotes: notes.length - listed.length } : {}),
+    ...(duplicates ? { suspectedDuplicates: duplicates } : {}), instruction: PRECHECK_INSTRUCTION };
 }

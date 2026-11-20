@@ -53,8 +53,8 @@
     },
     {
       "path": "docs/state-machines.md",
-      "bytes": 27609,
-      "sha256": "f4be5e908b3570b239b285f4be865691fcc97128d05d0b6041ff04a351822809"
+      "bytes": 28288,
+      "sha256": "1087e4db39533c2ba3422c0fb34953fc422553ccd34aa9aba3fcf79b2c9d0a14"
     },
     {
       "path": "docs/test-coverage.md",
@@ -158,8 +158,8 @@
     },
     {
       "path": "skills/a11y-audit/SKILL.md",
-      "bytes": 57980,
-      "sha256": "37ee13ab56f03c38441838e506aa666c17bff565b01e2e3fec0fc9fa3546ce52"
+      "bytes": 60515,
+      "sha256": "616eaef2f0d1d913e8d064393db5654092da7ff8660c4e754a993efb2ba87896"
     },
     {
       "path": "skills/a11y-audit/references/evidence-policy-v2.md",
@@ -213,8 +213,13 @@
     },
     {
       "path": "src/audit/error-details.js",
-      "bytes": 6029,
-      "sha256": "0a7fa59c6411ed5fe9634540eba6ef26fad9f1ff7398126575e0bb2af1caee08"
+      "bytes": 6169,
+      "sha256": "daa50a905d0ffd67ae9d4978a766cfb598c56e9bff0fe70d9c9c6740cbfda3de"
+    },
+    {
+      "path": "src/audit/gaps.js",
+      "bytes": 5188,
+      "sha256": "152fbd4791adcfb55e37a8e7294671ca0bb33ac9c3d359111c801a586ff26194"
     },
     {
       "path": "src/audit/inspect-many.js",
@@ -273,8 +278,8 @@
     },
     {
       "path": "src/audit/precheck.js",
-      "bytes": 31583,
-      "sha256": "f3074d4c9145587c60b1a83dc3e2d29f7b1e9687ffbef6c2edaa9b9ac08279f4"
+      "bytes": 37000,
+      "sha256": "d95e66cacf4919ebd095a2dd245e0b079f66f13f0783e41b9993933f5f11510c"
     },
     {
       "path": "src/audit/projection.js",
@@ -288,8 +293,8 @@
     },
     {
       "path": "src/audit/report-html.js",
-      "bytes": 72176,
-      "sha256": "f5f1a336de882e7e04a46a84864ffd5db676db37744be1cab37d664b62c42c5a"
+      "bytes": 76929,
+      "sha256": "a8bbb6919635943ca85cbbebdd1fe8e0e22b8384f5fb120daac084494d2dc133"
     },
     {
       "path": "src/audit/review-policy.js",
@@ -298,8 +303,8 @@
     },
     {
       "path": "src/audit/review.js",
-      "bytes": 57310,
-      "sha256": "c273232f0a228c5121093cc991b6ca8cb52339131c082c00913561755eb5a2e6"
+      "bytes": 58222,
+      "sha256": "289a56b7ff84bb2a7e32a2b531417b5ae6d043444040c20fcb642610c597f54d"
     },
     {
       "path": "src/audit/schema.js",
@@ -508,8 +513,8 @@
     },
     {
       "path": "test/audit-precheck.test.js",
-      "bytes": 29373,
-      "sha256": "d4cc3b9a066689dbaee97ad057366620ba33afdad35307941a78538b6f9bd221"
+      "bytes": 37157,
+      "sha256": "7d57b406e22bd88e64a24e5fb2f15282ae61ec97ff5aa39128013e9b32cd4ec7"
     },
     {
       "path": "test/audit-press-focus.test.js",
@@ -533,8 +538,8 @@
     },
     {
       "path": "test/audit-report-html.test.js",
-      "bytes": 49029,
-      "sha256": "98106903029e8bfacc95797afc19f994250b7235fcf79371ee138a072ccc6f6f"
+      "bytes": 57012,
+      "sha256": "5e8b7b7e85debede1973143b581c722597f58823c3439ad2857a64f889cd0858"
     },
     {
       "path": "test/audit-request-budget.test.js",
@@ -543,8 +548,8 @@
     },
     {
       "path": "test/audit-review.test.js",
-      "bytes": 34333,
-      "sha256": "652694186a3240273250f3e893c2a342c25c9c723c0aae736709efe9a0536431"
+      "bytes": 40295,
+      "sha256": "6b099af9ef97e2da30ffe59273783d766e8d8871374a5bf0584b86f5f788ed11"
     },
     {
       "path": "test/audit-stable-selector.test.js",

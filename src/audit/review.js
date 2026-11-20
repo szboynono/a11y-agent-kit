@@ -11,10 +11,13 @@ import { expandAxeAdoption, deriveAxeCandidates } from './axe-candidates.js';
 import { zodIssueDetails } from './error-details.js';
 import { stableSelectorIndex } from './stable-selector.js';
 import { CURRENT_REVIEW_POLICY, reviewPolicyOf, requiresReReview } from './review-policy.js';
+import { summarizeGaps } from './gaps.js';
 
 const criterionIds = new Set([...AUDIT_CATALOG.criteria, ...resolveAuditStandard({ version: '2.2', targetLevel: 'AA' }).criteria].map(criterion => criterion.id));
 const text = z.string().trim().min(1).max(20000).refine(value => !value.includes('\0'));
 const id = text.max(300);
+/** Bounds for the optional maker notes on a finding: list length and characters per string. */
+export const FINDING_NOTE_LIMITS = Object.freeze({ counterevidenceItems: 10, counterevidenceItem: 1000, confidenceRationale: 2000 });
 const identity = z.object({ name: text.max(200), model: text.max(300).optional() }).strict();
 const findingSchema = z.object({
   id,
@@ -31,6 +34,10 @@ const findingSchema = z.object({
   // Both or neither; validateProposal verifies the pair against the retained axe violation.
   source: z.literal('axe').optional(),
   axeCandidateId: id.optional(),
+  // Optional maker notes, additive and never required: observations that were tried but did not support the claim,
+  // and why the maker considers the claim established. No evidence gate, review outcome or count reads them.
+  counterevidence: z.array(text.max(FINDING_NOTE_LIMITS.counterevidenceItem)).min(1).max(FINDING_NOTE_LIMITS.counterevidenceItems).optional(),
+  confidenceRationale: text.max(FINDING_NOTE_LIMITS.confidenceRationale).optional(),
 }).strict();
 const proposalSchema = z.object({ auditor: identity, findings: z.array(findingSchema).max(1000) }).strict();
 const checkValue = z.enum(['supported', 'insufficient', 'contradicted']);
@@ -836,6 +843,8 @@ export function summarizeAudit(result) {
   return {
     ...metadata,
     ...(result.kind === 'audit-review' ? { reviewPolicy: reviewPolicyOf(result), requiresReReview: requiresReReview(result) } : {}),
+    // Additive: the same gap predicate and wording as the HTML report, without reading evidence files.
+    ...(result.kind === 'audit' ? {} : { evidenceGaps: summarizeGaps(result) }),
     outputFormat: 'summary',
     scope: { projectRoot: manifest.projectRoot, url: manifest.url, viewport: manifest.viewport, maxActions: manifest.maxActions, wallSeconds: manifest.wallSeconds },
     ...(records ? { records: records.map(record => ({ evidenceId: record.evidenceId, action: record.action, success: record.success, stateId: record.after?.stateId, documentId: record.after?.documentId, json: record.json, ...(record.png ? { png: record.png } : {}) })) } : {}),

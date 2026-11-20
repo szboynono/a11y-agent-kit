@@ -32,7 +32,7 @@ export const EXPECTED_FINDING = Object.freeze({
 });
 
 // Names the response may repeat back: our own schema field names and draftFinding names.
-const KNOWN_NAMES = new Set([...DRAFT_FINDING_FIELDS, ...PROPOSAL_FINDING_FIELDS, 'method', 'source', 'axeCandidateId', 'auditor', 'findings', 'adoptAxe', 'name', 'model', 'evidenceId']);
+const KNOWN_NAMES = new Set([...DRAFT_FINDING_FIELDS, ...PROPOSAL_FINDING_FIELDS, 'method', 'source', 'axeCandidateId', 'counterevidence', 'confidenceRationale', 'auditor', 'findings', 'adoptAxe', 'name', 'model', 'evidenceId']);
 
 const safePath = path => (Array.isArray(path) ? path : String(path ?? '').split('.').filter(Boolean))
   .map(part => typeof part === 'number' || /^\w{1,40}$/.test(String(part)) ? String(part) : '?').join('.');
@@ -76,7 +76,7 @@ export function proposalFindingHint(details) {
     : '';
   return {
     expectedFinding: EXPECTED_FINDING,
-    findingShapeNote: `${unknown}${unknown ? ' ' : ''}${others ? `${others} other unsupported field(s) were sent. ` : ''}Proposal findings need ${PROPOSAL_FINDING_FIELDS.map(key => key === 'target' ? 'target:{evidenceId,nodeId}' : key).join(', ')}; method is optional. Write your own observation/reason/applicability/exceptions/scope, or bank axe candidates with adoptAxe instead.`,
+    findingShapeNote: `${unknown}${unknown ? ' ' : ''}${others ? `${others} other unsupported field(s) were sent. ` : ''}Proposal findings need ${PROPOSAL_FINDING_FIELDS.map(key => key === 'target' ? 'target:{evidenceId,nodeId}' : key).join(', ')}; method, counterevidence (a list of observations that did not support the claim) and confidenceRationale are optional. Write your own observation/reason/applicability/exceptions/scope, or bank axe candidates with adoptAxe instead.`,
   };
 }
 

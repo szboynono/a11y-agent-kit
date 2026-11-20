@@ -1,6 +1,8 @@
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
-import { reviewPolicyOf, requiresReReview } from './review-policy.js';
+import { reviewPolicyOf } from './review-policy.js';
+import { reviewPlacement, findingGaps, GAP_STATES, GAP_ITEMS } from './gaps.js';
+import { suspectedDuplicateGroups } from './precheck.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { deriveAuditInventory } from './inventory.js';
 import { ToolError } from '../evidence.js';
@@ -188,6 +190,8 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;padding-right:0
 .db .ids{display:flex;flex-wrap:wrap;gap:var(--s1) var(--s2);list-style:none;padding:0}
 .ids code{background:var(--surface-2);padding:.0625rem .375rem;border-radius:var(--r1)}
 .hint{font-size:var(--fs-xs);color:var(--text-2)}
+.db h5{font-size:var(--fs-xs);font-weight:600;color:var(--text-2);line-height:var(--lh-tight);margin:0}
+.gaps{list-style:none;padding:0;display:grid;gap:var(--s1)}
 .shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,9rem),1fr));gap:var(--s2)}
 .shot img{display:block;max-width:100%;height:auto;border:1px solid var(--border-strong);border-radius:var(--r1)}
 .shot figcaption{font-size:var(--fs-xs);color:var(--text-2);margin-top:var(--s1)}
@@ -272,23 +276,25 @@ export const criterionName = (id, catalogRow) => (typeof catalogRow?.title === '
 
 function fail(message) { throw new ToolError('INVALID_AUDIT_REPORT', message); }
 
+// Optional maker notes are read only when present and nonempty; absence renders nothing, never "none".
+const NOTE_ITEMS = 10;
+function findingNotes(finding) {
+  const items = array(finding?.counterevidence).filter(item => typeof item === 'string' && item.trim());
+  const rationale = typeof finding?.confidenceRationale === 'string' && finding.confidenceRationale.trim() ? finding.confidenceRationale : undefined;
+  return { ...(items.length ? { counterevidence: items } : {}), ...(rationale ? { confidenceRationale: rationale } : {}) };
+}
+
 /** Normalize a checkpoint, needs-review proposal or reviewed report into one finding list. */
 export function normalizeAuditReport(report) {
   const mode = report && typeof report === 'object' ? KINDS[report.kind] : undefined;
   if (!mode) fail('Expected an audit-review, audit-proposal or audit-checkpoint-1 JSON file.');
   const source = mode === 'checkpoint' ? report.proposal : report;
-  const reReview = requiresReReview(report);
   if (!source || !Array.isArray(source.findings)) fail('The report has no findings array.');
-  const decisions = new Map(array(report.decisions).map(decision => [decision?.findingId, decision]));
-  const byId = (rows, status) => new Map(array(rows).map(row => [row?.id, { row, status }]));
-  const placed = new Map([
-    ...byId(report.verificationQueue, 'queue'), ...byId(report.rejectedObservations, 'rejected'), ...byId(report.confirmedFindings, 'confirmed'),
-  ]);
+  // Shared with the JSON summary (gaps.js), so both views place and label a finding the same way.
+  const placement = reviewPlacement(report), { decisions, placed, reReview } = placement;
   const findings = source.findings.map(finding => {
     const hit = placed.get(finding?.id), row = hit?.row ?? finding;
-    let status = 'needs_review';
-    if (hit?.status === 'confirmed' && !reReview) status = 'confirmed';
-    else if (hit?.status === 'rejected') status = 'rejected';
+    const status = placement.statusOf(finding?.id);
     const decision = row.decision ?? decisions.get(finding.id);
     return {
       id: finding.id, title: finding.title, criterionId: finding.criterionId,
@@ -297,6 +303,7 @@ export function normalizeAuditReport(report) {
       ...(typeof row.targetObservation?.stableSelector === 'string' && STABLE_SELECTOR_CONFIDENCE.includes(row.targetObservation.stableSelectorConfidence)
         ? { stableSelector: row.targetObservation.stableSelector, stableSelectorConfidence: row.targetObservation.stableSelectorConfidence, stableSelectorCheck: row.targetObservation.stableSelectorCheck } : {}),
       observation: finding.observation, reason: finding.reason, scope: finding.scope,
+      ...findingNotes(finding), decisionRecorded: placement.decisionRecorded(finding?.id),
       evidenceIds: array(finding.evidenceIds), reviewerReason: decision?.reason, reviewerVerdict: decision?.verdict,
       missing: status === 'confirmed' ? [] : [...array(row.missingEvidence).filter(item => typeof item === 'string'),
         ...(hit?.status === 'confirmed' && reReview ? ['Legacy or citation-only confirmation requires re-review under the current semantic predicates.'] : [])],
@@ -360,6 +367,9 @@ function untestedScope(model) {
     items.push(`DNS check degraded: ${failed === null ? 'some' : failed} of ${total === null ? 'the' : total} main-document DNS lookup${total === 1 ? '' : 's'} failed or timed out.${skippedText} Those navigations were checked against IP literals and localhost names only, so a DNS name that reaches a private address may not have been detected.`);
   }
   if (model.dnsCheck?.privateByResolution) items.push('The start URL host name resolved to a non-public address, so the session was treated as private (an internal or staging host): navigation between private addresses was allowed, and cloud metadata addresses stayed blocked.');
+  if (model.findings.some(finding => finding.gaps?.length) || model.collectionStatus === 'unavailable') {
+    items.push(`Evidence gaps are labelled per finding: ${Object.values(GAP_STATES).map(state => `${state.label}: ${state.meaning}`).join(' ')} Only the review decision, the target selector and the referenced collection are classified; other items are not.`);
+  }
   if (model.requiresReReview) items.push(`Review policy ${model.reviewPolicy} is legacy or citation-only. Its previous confirmations need re-review and are displayed as needs review.`);
   return items;
 }
@@ -413,8 +423,10 @@ function findingHead(finding, anchor, title, clip) {
 function findingFacts(finding, clip) {
   const selector = finding.selector !== undefined ? clip(Array.isArray(finding.selector) ? finding.selector.join(' ') : finding.selector, REPORT_LIMITS.selector) : '';
   const recorded = [finding.target.evidenceId ? `evidence <code>${esc(clip(finding.target.evidenceId, 40))}</code>` : '', finding.target.nodeId ? `node <code>${esc(clip(finding.target.nodeId, 120))}</code>` : ''].filter(Boolean);
+  const gaps = array(finding.gaps), targetGap = gaps.find(entry => entry.item === 'targetSelector');
+  const target = selector ? `<code>${esc(selector)}</code>` : targetGap?.state === 'unavailable' ? `${esc(targetGap.label)}: ${esc(targetGap.text)}` : 'not recorded';
   const rows = [
-    fact('Target', selector ? `<code>${esc(selector)}</code>` : 'not recorded', { className: 'target' }),
+    fact('Target', target, { className: 'target' }),
     fact('Recorded in', recorded.join(' · ') || 'not recorded'),
     fact('Scope', esc(clip(finding.scope))),
     fact('Observation', esc(clip(finding.observation)), { wide: true, ddClass: 'obs' }),
@@ -422,6 +434,9 @@ function findingFacts(finding, clip) {
   // Review outcomes stay visible: a reviewer's conclusion is never hidden behind a disclosure.
   if (finding.reviewerVerdict) rows.push(fact('Review verdict', esc(clip(finding.reviewerVerdict)), { wide: true }));
   if (finding.reviewerReason) rows.push(fact('Reviewer', esc(clip(finding.reviewerReason)), { wide: true }));
+  // Honest gaps use the shared wording from gaps.js, the same text as the JSON summary.
+  if (gaps.length) rows.push(fact('Evidence gaps', `<ul class="gaps">${gaps.map(entry => `<li><strong>${esc(entry.label)}</strong> · ${esc(GAP_ITEMS[entry.item].label)}: ${esc(entry.text)}</li>`).join('')}</ul>`, { wide: true }));
+  if (finding.duplicateOf?.length) rows.push(fact('Suspected duplicate', `Advisory only: same criterion, target and recorded state as ${finding.duplicateOf.map(id => `<code>${esc(clip(id, 120))}</code>`).join(', ')}. Nothing was merged, and counts are unchanged.`, { wide: true }));
   return `<dl class="facts">${rows.join('')}</dl>`;
 }
 
@@ -432,6 +447,16 @@ function findingShots(shots, repeated) {
   return figures + earlier + empty;
 }
 
+// Rendered only when the author supplied the note; an absent note has no heading, so it cannot read as "no counterevidence".
+const rationaleBlock = (finding, clip) => finding.confidenceRationale
+  ? `<h5>${esc("Author's confidence rationale")}</h5><p>${esc(clip(finding.confidenceRationale))}</p>` : '';
+function counterevidenceBlock(finding, clip, exactId) {
+  const items = array(finding.counterevidence), listed = exactId ? items : items.slice(0, NOTE_ITEMS);
+  if (!listed.length) return '';
+  const more = listed.length < items.length ? `<p class="hint">Showing ${listed.length} of ${items.length} items.</p>` : '';
+  return `<h5>${esc("Author's counterevidence")}</h5><p class="hint">Observations the author tried that did not support this claim. They are the author's notes, not reviewed evidence.</p><ul>${listed.map(item => `<li>${esc(clip(item))}</li>`).join('')}</ul>${more}`;
+}
+
 function findingDisclosures(finding, shots, repeated, pageUrl, clip, exactId) {
   const steps = reproduceSteps(finding, pageUrl, clip);
   const missing = exactId ? finding.missing : finding.missing.slice(0, REPORT_LIMITS.missing);
@@ -439,9 +464,9 @@ function findingDisclosures(finding, shots, repeated, pageUrl, clip, exactId) {
   const pictures = shots.length ? plural(shots.length, 'screenshot') : repeated.length ? 'screenshot shown earlier' : 'no screenshot';
   const parts = [
     disclosure('Reproduce', plural(steps.length, 'step'), `<ol>${steps.map(step => `<li>${step}</li>`).join('')}</ol>`),
-    disclosure('Why it may fail the criterion', "author's claim", `<p>${esc(clip(finding.reason))}</p>`),
+    disclosure('Why it may fail the criterion', "author's claim", `<p>${esc(clip(finding.reason))}</p>${rationaleBlock(finding, clip)}`),
     disclosure('Evidence', `${plural(ids.length, 'ID')} · ${pictures}`,
-      `${ids.length ? `<ul class="ids" aria-label="Evidence IDs">${ids.join('')}</ul>` : '<p>No evidence IDs were recorded.</p>'}${findingShots(shots, repeated)}`),
+      `${ids.length ? `<ul class="ids" aria-label="Evidence IDs">${ids.join('')}</ul>` : '<p>No evidence IDs were recorded.</p>'}${counterevidenceBlock(finding, clip, exactId)}${findingShots(shots, repeated)}`),
   ];
   if (missing.length) {
     const meta = missing.length < finding.missing.length ? `${missing.length} of ${finding.missing.length} items` : plural(missing.length, 'item');
@@ -517,19 +542,38 @@ function renderToc(entries) {
   return `<nav class="toc" aria-labelledby="toc-h"><h2 id="toc-h">Contents</h2><ol>${entries.map(item).join('')}</ol></nav>`;
 }
 
+const selectorRecorded = selector => Array.isArray(selector) ? selector.length > 0 : typeof selector === 'string' && selector.length > 0;
+
+/**
+ * Fill best-effort loader results into normalized findings: recorded and reload-stable selectors, the shared evidence gaps
+ * and advisory suspected-duplicate links. Lookups and states exist only for findings whose evidence file the loader tried.
+ */
+function applyContext(model, { selectors, targets, lookups, states } = {}) {
+  const keyOf = finding => `${finding.target.evidenceId}|${finding.target.nodeId}`;
+  for (const finding of model.findings) {
+    const key = keyOf(finding);
+    finding.selector ??= selectors?.get(key);
+    const local = targets?.get(key);
+    if (!finding.stableSelector && local?.stableSelector) Object.assign(finding, { stableSelector: local.stableSelector, stableSelectorConfidence: local.stableSelectorConfidence, stableSelectorCheck: local.stableSelectorCheck });
+    finding.gaps = findingGaps({ mode: model.mode, status: finding.status, decisionRecorded: finding.decisionRecorded, evidenceId: finding.target.evidenceId,
+      selectorRecorded: selectorRecorded(finding.selector) }, lookups?.has(key) ? { targetRecord: lookups.get(key) } : null);
+  }
+  const groups = suspectedDuplicateGroups(model.findings.map(finding => ({ findingId: finding.id, criterionId: finding.criterionId,
+    stateId: states?.get(keyOf(finding)), nodeId: finding.target.nodeId, stableSelector: finding.stableSelector })));
+  const others = new Map();
+  for (const group of groups) for (const id of group.findingIds) others.set(id, group.findingIds.filter(other => other !== id));
+  for (const finding of model.findings) if (others.has(finding.id)) finding.duplicateOf = others.get(finding.id);
+  return model;
+}
+
 /**
  * Render one self-contained HTML document (inline CSS only, no script, no external requests).
  * `images` maps evidence IDs to `{ evidenceId, base64, width, height }` already size-checked by the loader.
  */
-function renderReportDocument(report, { images = new Map(), imageNotes = [], selectors = new Map(), targets = new Map(), inventory = [], references = [], projection } = {}) {
+function renderReportDocument(report, { images = new Map(), imageNotes = [], selectors = new Map(), targets = new Map(), lookups, states, collectionStatus, inventory = [], references = [], projection } = {}) {
   const clip = projection ? fullText : clipDefault;
-  const model = normalizeAuditReport(report);
-  for (const finding of model.findings) {
-    const key = `${finding.target.evidenceId}|${finding.target.nodeId}`;
-    finding.selector ??= selectors.get(key);
-    const local = targets.get(key);
-    if (!finding.stableSelector && local?.stableSelector) Object.assign(finding, { stableSelector: local.stableSelector, stableSelectorConfidence: local.stableSelectorConfidence, stableSelectorCheck: local.stableSelectorCheck });
-  }
+  const model = applyContext(normalizeAuditReport(report), { selectors, targets, lookups, states });
+  model.collectionStatus = collectionStatus;
   const shown = projection ? model.findings : model.findings.slice(0, REPORT_LIMITS.findings);
   const groups = new Map(), embedded = new Set();
   for (const finding of shown) groups.set(finding.criterionId, [...(groups.get(finding.criterionId) ?? []), finding]);
@@ -582,7 +626,7 @@ ${renderSummary(model, ordered, catalog, { shownCount: shown.length, linkGroups:
 <section aria-labelledby="findings"><h2 id="findings">${projection ? 'Original finding records' : 'Findings by WCAG success criterion'}</h2>
 ${projection ? '' : '<p class="lede">Each finding is an observation about one recorded target, not a whole-criterion verdict. Open a row for steps, rationale, evidence and what is still missing.</p>\n'}${projection?.navigation ? projection.navigation + '\n' : ''}${sections.join('\n') || '<p>No findings were recorded. That does not mean the page is accessible.</p>'}</section>
 ${renderInventory(report, inventory, clip, hrefs)}
-${renderReferences(references, clip)}
+${renderReferences(references, clip, collectionStatus)}
 <section aria-labelledby="scope"><h2 id="scope">Untested scope and limits</h2><div class="scope"><ul>${untestedScope(model).map(item => `<li>${esc(item)}</li>`).join('')}</ul>
 ${imageNotes.length ? `<p class="note">${imageNotes.map(esc).join(' ')}</p>` : ''}</div></section>
 </main></div>
@@ -639,8 +683,10 @@ function sharedDirectory(paths) {
   return directory.endsWith('/') ? directory : `${directory}/`;
 }
 
-function renderReferences(references, clip) {
+function renderReferences(references, clip, collectionStatus) {
   const head = '<section aria-labelledby="originals"><h2 id="originals">Original evidence sources</h2><p class="lede">Paths are local references, relative to this HTML directory when available. They come from recorded attachment metadata; existence and digests are not verified here.</p>';
+  // A referenced collection that could not be read is Unavailable, not "not recorded".
+  if (!references.length && collectionStatus === 'unavailable') return `${head}<p>${esc(GAP_STATES.unavailable.label)}: the referenced collection could not be read, so its original JSON and PNG paths cannot be shown. ${esc(GAP_STATES.unavailable.meaning)}</p></section>`;
   if (!references.length) return `${head}<p>Original JSON path not recorded. Original PNG path not recorded.</p></section>`;
   // Lossless compression: a common directory moves into the caption only when every recorded path shares it.
   const base = sharedDirectory(references.flatMap(row => [row.json, row.png]).filter(Boolean));
@@ -688,21 +734,25 @@ export async function loadReportContext(reportPath, report, { screenshots = fals
       } catch { inventory.length = 0; notes.push('Original inventory could not be derived from the referenced collection.'); }
     }
   }
+  const collectionStatus = typeof reference !== 'string' ? 'not-referenced' : collection ? 'read' : 'unavailable';
   const sourceRows = collection?.records ?? report.evidence ?? report.records ?? [];
   const sourceDir = collection ? path.dirname(path.resolve(dir, reference)) : dir;
   for (const row of array(sourceRows)) {
     const attachment = key => typeof row[key]?.path === 'string' && row[key].path ? path.relative(outputDirectory ?? dir, path.resolve(sourceDir, row[key].path)) : null;
     references.push({ evidenceId: row.evidenceId, json: attachment('json'), png: attachment('png'), source: collection ? 'collection.records' : 'input report attachment metadata' });
   }
-  const records = new Map();
+  const records = new Map(), lookups = new Map(), states = new Map();
   const record = async id => {
     if (!records.has(id)) records.set(id, await readJson(path.join(dir, `${id}.json`), REPORT_LIMITS.evidenceFileBytes, { sidecar: true }).catch(() => null));
     return records.get(id);
   };
   for (const finding of model.findings) {
-    if (!EVIDENCE_ID.test(finding.target.evidenceId ?? '')) continue;
-    const original = await record(finding.target.evidenceId);
     const key = `${finding.target.evidenceId}|${finding.target.nodeId}`;
+    // A target with no usable evidence ID refers to no record: its selector can only be missing, never unavailable.
+    if (!EVIDENCE_ID.test(finding.target.evidenceId ?? '')) { lookups.set(key, 'not-referenced'); continue; }
+    const original = await record(finding.target.evidenceId);
+    lookups.set(key, original && typeof original === 'object' ? 'read' : 'unavailable');
+    if (typeof original?.after?.stateId === 'string') states.set(key, original.after.stateId);
     // Drafts carry no targetObservation: derive a stable selector from this one record (its own nodes and in-page checks) only.
     const stable = finding.stableSelector || !original ? {} : stableSelectorIndex([original]).fieldsFor(finding.target);
     if (stable.stableSelector) targets.set(key, stable);
@@ -726,7 +776,7 @@ export async function loadReportContext(reportPath, report, { screenshots = fals
     }
     if (skipped) notes.push(`${skipped} screenshot${skipped === 1 ? ' was' : 's were'} not embedded (over the ${REPORT_LIMITS.imageBytes / 1024} KiB per-image, ${REPORT_LIMITS.imagesTotalBytes / 1024 / 1024} MiB total or ${REPORT_LIMITS.images}-image cap, or failed the SHA-256 check).`);
   } else notes.push('Screenshots were not embedded (use --screenshots).');
-  return { selectors, targets, images, imageNotes: notes, inventory, references };
+  return { selectors, targets, lookups, states, collectionStatus, images, imageNotes: notes, inventory, references };
 }
 
 // Delivery protects originals without requiring audit-check or changing projection semantics.
@@ -822,13 +872,9 @@ export const BOUNDED_REPORT_LIMITS = Object.freeze({ findings: 50, bytes: 500000
 export function renderBoundedAuditReportHtml(report, context = {}) {
   const model = normalizeAuditReport(report), embedded = new Set();
   const anchors = findingAnchors(model.findings.map(finding => finding.id), fullText);
-  const cards = model.findings.map((finding, i) => {
-    const key = `${finding.target.evidenceId}|${finding.target.nodeId}`;
-    finding.selector ??= context.selectors?.get(key);
-    const local = context.targets?.get(key);
-    if (!finding.stableSelector && local?.stableSelector) Object.assign(finding, { stableSelector: local.stableSelector, stableSelectorConfidence: local.stableSelectorConfidence, stableSelectorCheck: local.stableSelectorCheck });
-    return { criterionId: finding.criterionId, html: renderFinding(finding, anchors[i], context.images ?? new Map(), embedded, model.url, fullText, true) };
-  });
+  applyContext(model, context);
+  const cards = model.findings.map((finding, i) => ({ criterionId: finding.criterionId,
+    html: renderFinding(finding, anchors[i], context.images ?? new Map(), embedded, model.url, fullText, true) }));
   const catalog = new Map(model.coverage.map(row => [row.id, row]));
   // Same card component as the single file; each record keeps its own criterion heading, numbered within the page.
   const pageBody = (start, end) => cards.slice(start, end).map((card, offset) => {

@@ -7,7 +7,9 @@ import { createHash, randomUUID } from 'node:crypto';
 import { digest, fingerprint } from '../src/evidence.js';
 import { AUDIT_CATALOG, AUDIT_STANDARD, AUDIT_SCHEMA_VERSION, parseAuditManifest } from '../src/audit/schema.js';
 import { createAuditDirectory, writeAuditArtifact, saveAuditDocument } from '../src/audit/store.js';
-import { submitAudit, reviewAudit, checkAudit, summarizeAudit } from '../src/audit/review.js';
+import { submitAudit, reviewAudit, checkAudit, summarizeAudit, FINDING_NOTE_LIMITS } from '../src/audit/review.js';
+import { GAP_ITEMS, GAP_STATES, GAP_LOOKUP_NOTE } from '../src/audit/gaps.js';
+import { renderAuditReportHtml } from '../src/audit/report-html.js';
 
 // These are contract fixtures, not browser observations or semantic gold labels.
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aN1kAAAAASUVORK5CYII=', 'base64');
@@ -474,4 +476,62 @@ test('legacy and citation-only reports recompute intact but explicitly require r
     assert.equal(inventory.source.requiresReReview, true);
     assert.deepEqual(await fs.readFile(saved.reportPath), before);
   }
+});
+
+test('optional counterevidence and confidenceRationale are additive maker notes that never change gates, outcomes or counts', async t => {
+  const fixture = await collectionFixture(t);
+  const notes = { counterevidence: ['At 320 px the relationship was still conveyed visually.', 'A second snapshot showed the same markup.'], confidenceRationale: 'Two observations of the same state agree.' };
+  const plain = await submitAudit(fixture.audit.reportPath, proposal(fixture));
+  const noted = await submitAudit(fixture.audit.reportPath, proposal(fixture, [finding(fixture, notes)]));
+  assert.deepEqual(noted.findings[0].counterevidence, notes.counterevidence); assert.equal(noted.findings[0].confidenceRationale, notes.confidenceRationale);
+  assert.deepEqual(noted.verificationQueue[0].counterevidence, notes.counterevidence); assert.equal(noted.verificationQueue[0].confidenceRationale, notes.confidenceRationale);
+  // An old proposal without the notes keeps exactly its old shape.
+  for (const row of [plain.findings[0], plain.verificationQueue[0]]) for (const key of ['counterevidence', 'confidenceRationale']) assert.equal(Object.hasOwn(row, key), false, key);
+  for (const key of ['status', 'semanticValidation', 'counts', 'confirmedFindings', 'rejectedObservations']) assert.deepEqual(noted[key], plain[key], key);
+  assert.deepEqual(noted.verificationQueue[0].evidenceGate, plain.verificationQueue[0].evidenceGate);
+  assert.deepEqual(noted.verificationQueue[0].missingEvidence, plain.verificationQueue[0].missingEvidence);
+  assert.equal((await checkAudit(noted.reportPath)).status, 'current'); assert.equal((await checkAudit(plain.reportPath)).status, 'current');
+  const reviewedPlain = await reviewAudit(plain.reportPath, adjudication()), reviewedNoted = await reviewAudit(noted.reportPath, adjudication());
+  for (const key of ['status', 'counts', 'reviewProgress']) assert.deepEqual(reviewedNoted[key], reviewedPlain[key], key);
+  assert.deepEqual(reviewedNoted.verificationQueue[0].missingEvidence, reviewedPlain.verificationQueue[0].missingEvidence);
+  assert.deepEqual(reviewedNoted.verificationQueue[0].counterevidence, notes.counterevidence);
+  assert.equal((await checkAudit(reviewedNoted.reportPath)).status, 'current');
+  assert.deepEqual(summarizeAudit(reviewedNoted).findings[0].counterevidence, notes.counterevidence);
+});
+
+test('optional finding notes are bounded and strictly shaped; values at the limits are accepted', async t => {
+  const fixture = await collectionFixture(t);
+  const { counterevidenceItems, counterevidenceItem, confidenceRationale } = FINDING_NOTE_LIMITS;
+  const invalid = [
+    { counterevidence: [] }, { counterevidence: ['x'.repeat(counterevidenceItem + 1)] }, { counterevidence: Array(counterevidenceItems + 1).fill('x') },
+    { counterevidence: 'one string' }, { counterevidence: ['   '] }, { counterevidence: [{ note: 'object' }] },
+    { confidenceRationale: 'x'.repeat(confidenceRationale + 1) }, { confidenceRationale: '' }, { confidenceRationale: ['list'] }, { counterEvidence: ['misspelled'] },
+  ];
+  for (const extra of invalid) {
+    await assert.rejects(submitAudit(fixture.audit.reportPath, proposal(fixture, [finding(fixture, extra)])), { code: 'INVALID_AUDIT_PROPOSAL' }, JSON.stringify(extra).slice(0, 80));
+  }
+  const max = { counterevidence: Array(counterevidenceItems).fill('y'.repeat(counterevidenceItem)), confidenceRationale: 'z'.repeat(confidenceRationale) };
+  const accepted = await submitAudit(fixture.audit.reportPath, proposal(fixture, [finding(fixture, max)]));
+  assert.equal(accepted.findings[0].counterevidence.length, counterevidenceItems); assert.equal(accepted.findings[0].confidenceRationale.length, confidenceRationale);
+});
+
+test('JSON summary and HTML report state evidence gaps with one predicate and one wording', async t => {
+  const fixture = await collectionFixture(t);
+  const second = finding(fixture, { id: 'F02', criterionId: '1.4.5' });
+  const submitted = await submitAudit(fixture.audit.reportPath, proposal(fixture, [finding(fixture), second]));
+  const proposalGaps = summarizeAudit(submitted).evidenceGaps;
+  assert.deepEqual(proposalGaps.states, GAP_STATES); assert.equal(proposalGaps.fileLookups, 'not-performed'); assert.equal(proposalGaps.note, GAP_LOOKUP_NOTE);
+  assert.deepEqual(proposalGaps.items, [{ item: 'review', state: 'unverified', label: 'Unverified', text: GAP_ITEMS.review.unverified, findingIds: ['F01', 'F02'] }]);
+  // A review that decides only F01 leaves F02 without a recorded decision: Missing, not Unverified.
+  const reviewed = await reviewAudit(submitted.reportPath, adjudication([decision('F01', { verdict: 'insufficient' })]));
+  const gaps = summarizeAudit(reviewed).evidenceGaps;
+  assert.deepEqual(gaps.items.map(row => [row.item, row.state, row.findingIds]), [['review', 'unverified', ['F01']], ['review', 'missing', ['F02']]]);
+  assert.equal(gaps.items.some(row => row.state === 'unavailable'), false, 'no file lookups, so nothing is called unavailable');
+  assert.equal(summarizeAudit(fixture.audit).evidenceGaps, undefined, 'a collection has no findings to classify');
+  assert.equal(summarizeAudit(await checkAudit(reviewed.reportPath)).report.evidenceGaps.items.length, 2);
+  // The HTML card carries the same label and text for the same finding.
+  const html = renderAuditReportHtml(reviewed);
+  const card = id => html.slice(html.indexOf(`id="f-${id}"`), html.indexOf('</article>', html.indexOf(`id="f-${id}"`)));
+  for (const row of gaps.items) for (const id of row.findingIds) assert.ok(card(id).includes(`<strong>${row.label}</strong> · ${GAP_ITEMS[row.item].label}: ${row.text}`), `${id} ${row.state}`);
+  assert.doesNotMatch(card('F01'), /<strong>Missing<\/strong>/); assert.doesNotMatch(card('F02'), /<strong>Unverified<\/strong>/);
 });

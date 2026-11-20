@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
-import { precheckNode, precheckContextFromRecords, precheckProposal, precheckSession, PRECHECK_RULES } from '../src/audit/precheck.js';
+import { precheckNode, precheckContextFromRecords, precheckProposal, precheckSession, PRECHECK_RULES, suspectedDuplicateGroups, DUPLICATE_RULE, DUPLICATE_INSTRUCTION } from '../src/audit/precheck.js';
 import { openAuditAgent } from '../src/audit/agent.js';
 import { fixture } from './helpers.js';
 
@@ -302,4 +302,77 @@ test('agent checkpoint ACK carries no-keyboard-evidence and name-present-now not
   assert.equal(draft.precheck.notes[1].basis.source, 'title'); assert.equal(draft.precheck.notes[1].basis.evidenceId, 'ev-0003');
   assert.equal(draft.checkpoint.findings, 2);
   await agent.close();
+});
+
+test('suspected duplicates: same criterion, same stateId and the same nodeId or stableSelector form one group; anything else does not', () => {
+  const row = (findingId, extra = {}) => ({ findingId, criterionId: '4.1.2', stateId: 's1', nodeId: `n-${findingId}`, ...extra });
+  assert.deepEqual(suspectedDuplicateGroups([row('A', { nodeId: 'n1' }), row('B', { nodeId: 'n1' })]),
+    [{ criterionId: '4.1.2', stateId: 's1', matchedBy: ['nodeId'], nodeIds: ['n1'], findingIds: ['A', 'B'] }]);
+  assert.deepEqual(suspectedDuplicateGroups([row('A', { stableSelector: '#save' }), row('B', { stableSelector: '#save' })]),
+    [{ criterionId: '4.1.2', stateId: 's1', matchedBy: ['stableSelector'], stableSelector: '#save', nodeIds: ['n-A', 'n-B'], findingIds: ['A', 'B'] }]);
+  // Negative cases: a different state, selector, node, criterion, or no stateId at all.
+  for (const rows of [
+    [row('A', { nodeId: 'n1' }), row('B', { nodeId: 'n1', stateId: 's2' })],
+    [row('A', { stableSelector: '#save' }), row('B', { stableSelector: '#cancel' })],
+    [row('A', { nodeId: 'n1' }), row('B', { nodeId: 'n2' })],
+    [row('A', { nodeId: 'n1' }), row('B', { nodeId: 'n1', criterionId: '1.1.1' })],
+    [row('A', { nodeId: 'n1', stateId: undefined }), row('B', { nodeId: 'n1', stateId: undefined })],
+    [row('A', { nodeId: undefined }), row('B', { nodeId: undefined })],
+  ]) assert.deepEqual(suspectedDuplicateGroups(rows), [], JSON.stringify(rows));
+  // A shared selector joins one pair and a shared node another: one group, input order kept.
+  const chained = suspectedDuplicateGroups([row('A', { nodeId: 'n1' }), row('X', { nodeId: 'n9' }), row('B', { nodeId: 'n1', stableSelector: '#s' }), row('C', { nodeId: 'n2', stableSelector: '#s' })]);
+  assert.deepEqual(chained.map(group => [group.findingIds, group.matchedBy, Object.hasOwn(group, 'stableSelector')]), [[['A', 'B', 'C'], ['nodeId', 'stableSelector'], false]]);
+});
+
+test('precheckProposal lists suspected duplicates from session records only, bounded and without changing notes or findings', () => {
+  const doc = 'doc-d', node = (id, extra = {}) => ({ nodeId: `${doc}:${id}`, documentId: doc, parentNodeId: null, tag: 'button', attributes: { id }, text: id, selector: `#${id}`, ...extra });
+  const snap = (evidenceId, stateId, nodes) => ({ evidenceId, action: 'snapshot', success: true, after: { documentId: doc, stateId }, result: { nodes } });
+  const records = [snap('ev-0001', 's1', [node('save'), node('other')]), snap('ev-0002', 's1', [node('save'), node('other')]), snap('ev-0003', 's2', [node('save')])];
+  const finding = (id, evidenceId, nodeId, criterionId = '4.1.2') => ({ id, criterionId, target: { evidenceId, nodeId: `${doc}:${nodeId}` } });
+  const findings = [finding('F1', 'ev-0001', 'save'), finding('F2', 'ev-0002', 'save'), finding('F3', 'ev-0003', 'save'), finding('F4', 'ev-0001', 'other'), finding('F5', 'ev-0001', 'save', '1.1.1')];
+  const result = precheckProposal({ findings }, records);
+  assert.equal(result.suspectedDuplicates.rule, DUPLICATE_RULE); assert.equal(result.suspectedDuplicates.advisory, true);
+  assert.equal(result.suspectedDuplicates.instruction, DUPLICATE_INSTRUCTION); assert.equal(result.suspectedDuplicates.groupsFound, 1);
+  const [group] = result.suspectedDuplicates.groups;
+  assert.deepEqual([group.criterionId, group.stateId, group.findingIds, group.nodeIds], ['4.1.2', 's1', ['F1', 'F2'], [`${doc}:save`]]);
+  assert.ok(group.matchedBy.includes('nodeId'));
+  // Without the duplicate the notes are identical: the hint adds a section, it never adds, drops or rewrites notes.
+  const alone = precheckProposal({ findings: findings.filter(row => row.id !== 'F2') }, records);
+  assert.equal(Object.hasOwn(alone, 'suspectedDuplicates'), false);
+  assert.deepEqual(result.notes.filter(note => note.findingId !== 'F2'), alone.notes); assert.equal(result.checkedFindings, 5);
+  assert.equal(result.instruction, alone.instruction); assert.equal(result.version, alone.version);
+  // Many repeats stay inside the section budget, with counts instead of silent drops.
+  const many = precheckProposal({ findings: Array.from({ length: 30 }, (_, i) => finding(`M${i}`, 'ev-0001', 'save')) }, records).suspectedDuplicates;
+  assert.equal(many.groupsFound, 1); assert.equal(many.groups[0].findingIds.length, 10); assert.equal(many.groups[0].findingCount, 30);
+  const spread = Array.from({ length: 30 }, (_, i) => [finding(`P${i}a`, 'ev-0001', `n${i}`), finding(`P${i}b`, 'ev-0002', `n${i}`)]).flat();
+  const wide = precheckProposal({ findings: spread }, [snap('ev-0001', 's1', Array.from({ length: 30 }, (_, i) => node(`n${i}`))), snap('ev-0002', 's1', Array.from({ length: 30 }, (_, i) => node(`n${i}`)))]).suspectedDuplicates;
+  assert.equal(wide.groupsFound, 30); assert.ok(wide.groups.length <= 10 && Buffer.byteLength(JSON.stringify(wide.groups)) <= 2000);
+  assert.equal(wide.groups.length + wide.omittedGroups, 30);
+});
+
+test('agent checkpoint and submit keep every suspected duplicate and its optional notes; the hint is advisory only', async t => {
+  const page = '<!doctype html><html lang="en"><head><title>Duplicates</title></head><body><main><button id="save"></button><button id="next">Next</button></main></body></html>';
+  const site = await fixture(t, page), agent = await openAuditAgent({ projectRoot: site.projectRoot, url: site.url });
+  t.after(() => agent.close());
+  assert.equal((await agent.request({ tool: 'step', actions: [{ action: 'snapshot' }, { action: 'snapshot' }] })).success, true);
+  const read = async id => JSON.parse(await fs.readFile(path.join(agent.directory, `${id}.json`)));
+  const [first, second] = [await read('ev-0001'), await read('ev-0002')];
+  assert.equal(first.after.stateId, second.after.stateId, 'two snapshots of one unchanged state');
+  const node = (record, id) => record.result.nodes.find(row => row.attributes?.id === id).nodeId;
+  const finding = (id, record, nodeId, extra = {}) => ({ id, title: `Claim ${id}`, criterionId: '4.1.2', target: { evidenceId: record.evidenceId, nodeId }, evidenceIds: [record.evidenceId],
+    observation: 'Observed node.', reason: 'Draft reason.', applicability: 'Draft applicability.', exceptions: 'None recorded.', scope: 'This node.', ...extra });
+  const notes = { counterevidence: ['The button text was empty in both snapshots.'], confidenceRationale: 'Two snapshots of one state agree.' };
+  const proposal = { auditor: { name: 'Duplicate test' }, findings: [finding('D1', first, node(first, 'save'), notes), finding('D2', second, node(second, 'save')), finding('D3', first, node(first, 'next'))] };
+  const draft = await agent.request({ tool: 'checkpoint', proposal });
+  assert.equal(draft.success, true, JSON.stringify(draft)); assert.equal(draft.checkpoint.findings, 3);
+  assert.deepEqual(draft.precheck.suspectedDuplicates.groups.map(group => group.findingIds), [['D1', 'D2']]);
+  const submitted = await agent.request({ tool: 'submit', checkpointDigest: draft.checkpoint.checkpointDigest });
+  assert.equal(submitted.success, true, JSON.stringify(submitted));
+  assert.equal(submitted.counts.originalFindings, 3); assert.equal(submitted.counts.verificationQueue, 3);
+  assert.deepEqual(submitted.precheck.suspectedDuplicates.groups[0].findingIds, ['D1', 'D2']);
+  const stored = JSON.parse(await fs.readFile(submitted.proposalReportPath));
+  assert.deepEqual(stored.findings.map(row => row.id), ['D1', 'D2', 'D3']);
+  assert.deepEqual(stored.findings[0].counterevidence, notes.counterevidence); assert.equal(stored.findings[0].confidenceRationale, notes.confidenceRationale);
+  assert.equal(Object.hasOwn(stored.findings[1], 'counterevidence'), false);
+  assert.equal((await agent.close()).status, 'submitted');
 });

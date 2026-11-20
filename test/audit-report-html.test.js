@@ -616,3 +616,98 @@ test('finding anchors are unique, resolvable tokens for free-text, colliding and
     }
   }
 });
+
+test('optional maker notes render only when present, inside the existing Why and Evidence disclosures', () => {
+  const notes = { counterevidence: ['At 320 px the label <b>stayed</b> visible.', 'A second snapshot matched.'], confidenceRationale: 'Two observations of one state agree.' };
+  const findings = [finding('a', '4.1.2', notes), finding('b', '4.1.2'), finding('c', '4.1.2', { counterevidence: [], confidenceRationale: '  ' })];
+  const report = reviewed(findings, { queue: ['a', 'b', 'c'], decisions: [decision('a', 'insufficient'), decision('b', 'insufficient'), decision('c', 'insufficient')] });
+  const html = renderAuditReportHtml(report);
+  const card = id => html.slice(html.indexOf(`id="f-${id}"`), html.indexOf('</article>', html.indexOf(`id="f-${id}"`)));
+  const why = id => card(id).slice(card(id).indexOf('<summary>Why it may fail'), card(id).indexOf('<summary>Evidence'));
+  const evidence = id => card(id).slice(card(id).indexOf('<summary>Evidence'));
+  assert.match(why('a'), /<h5>Author&#39;s confidence rationale<\/h5><p>Two observations of one state agree\.<\/p>/);
+  assert.match(evidence('a'), /<h5>Author&#39;s counterevidence<\/h5>/);
+  assert.match(evidence('a'), /<li>At 320 px the label &lt;b&gt;stayed&lt;\/b&gt; visible\.<\/li><li>A second snapshot matched\.<\/li>/);
+  for (const id of ['b', 'c']) {
+    assert.doesNotMatch(card(id), /confidence rationale|counterevidence/i, `no heading or placeholder for absent notes on ${id}`);
+    assert.doesNotMatch(card(id), /<h5>/);
+  }
+  // Same disclosures as before: Reproduce, Why, Evidence, Missing per card. No new layout block.
+  assert.equal((html.match(/<details[\s>]/g) ?? []).length, findings.length * 4);
+  const { headings } = (() => ({ headings: [...html.matchAll(/<h([1-6])[\s>]/g)].map(hit => Number(hit[1])) }))();
+  headings.forEach((level, i) => assert.ok(i === 0 || level <= headings[i - 1] + 1, `heading h${level} after h${headings[i - 1]}`));
+  // Bounded delivery renders the same blocks, untruncated.
+  const pages = renderBoundedAuditReportHtml(report);
+  assert.match(pages[1].html, /<h5>Author&#39;s counterevidence<\/h5>/); assert.equal((pages[1].html.match(/<h5>/g) ?? []).length, 2);
+});
+
+test('a report without notes, gaps or duplicates renders no new blocks', () => {
+  const findings = [finding('a', '4.1.2'), finding('b', '1.4.3')];
+  const html = renderAuditReportHtml(reviewed(findings, { confirmed: ['a'], rejected: ['b'], decisions: [decision('a'), decision('b', 'rejected')] }));
+  assert.doesNotMatch(html, /<h5>|Evidence gaps|Suspected duplicate|class="gaps"|Evidence gaps are labelled/);
+});
+
+test('target selector gaps: Missing when nothing was recorded, Unavailable when the target record could not be read', async t => {
+  const node = { nodeId: 'doc-1:a', documentId: 'doc-1', selector: '#found' };
+  const dir = await evidenceDir(t, {
+    'ev-0001.json': JSON.stringify({ evidenceId: 'ev-0001', after: { documentId: 'doc-1', stateId: 's1' }, result: { nodes: [node] } }),
+    'ev-0002.json': '{ not json',
+  });
+  const draft = (id, evidenceId, nodeId = `doc-1:${id}`) => ({ ...finding(id, '4.1.2'), target: { evidenceId, nodeId }, evidenceIds: [evidenceId] });
+  const checkpoint = { kind: 'audit-checkpoint-1', runId: 'r', checkpointDigest: 'sha256:cp', context: { standard },
+    proposal: { auditor: { name: 'Maker' }, findings: [draft('a', 'ev-0001'), draft('b', 'ev-0001'), draft('c', 'ev-0002'), draft('d', 'ev-0003'), draft('e', 'not-an-id')] } };
+  const file = path.join(dir, 'checkpoint.json');
+  const context = await loadReportContext(file, checkpoint);
+  assert.deepEqual([...context.lookups.values()], ['read', 'read', 'unavailable', 'unavailable', 'not-referenced']);
+  const html = renderAuditReportHtml(checkpoint, context);
+  const card = id => html.slice(html.indexOf(`id="f-${id}"`), html.indexOf('</article>', html.indexOf(`id="f-${id}"`)));
+  const targetCell = id => card(id).match(/<dt>Target<\/dt><dd>(.*?)<\/dd>/)[1];
+  assert.equal(targetCell('a'), '<code>#found</code>'); assert.doesNotMatch(card('a'), /Target selector:/);
+  for (const id of ['b', 'e']) {
+    assert.equal(targetCell(id), 'not recorded', id);
+    assert.ok(card(id).includes('<strong>Missing</strong> · Target selector: No target selector was recorded for this finding.'), id);
+  }
+  for (const id of ['c', 'd']) {
+    assert.equal(targetCell(id), 'Unavailable: The target evidence record could not be read, so its selector cannot be shown.', id);
+    assert.ok(card(id).includes('<strong>Unavailable</strong> · Target selector:'), id); assert.doesNotMatch(card(id), /<strong>Missing<\/strong>/);
+  }
+  for (const id of ['a', 'b', 'c', 'd', 'e']) assert.ok(card(id).includes('<strong>Unverified</strong> · Review:'), id);
+  assert.match(html, /Evidence gaps are labelled per finding: Missing: .* Unavailable: .* Unverified: /);
+  // Without a loader nothing is looked up, so no target gap is claimed either way.
+  assert.doesNotMatch(renderAuditReportHtml(checkpoint), /Target selector:/);
+});
+
+test('an unreadable referenced collection is Unavailable in the evidence sources, not "not recorded"', async t => {
+  const dir = await evidenceDir(t, {});
+  const report = { ...reviewed([finding('a', '4.1.2')], { confirmed: ['a'], decisions: [decision('a')] }), collection: { reportPath: 'gone.json' } };
+  const context = await loadReportContext(path.join(dir, 'reviewed.json'), report);
+  assert.equal(context.collectionStatus, 'unavailable');
+  const html = renderAuditReportHtml(report, context);
+  assert.match(html, /Unavailable: the referenced collection could not be read, so its original JSON and PNG paths cannot be shown\./);
+  assert.doesNotMatch(html, /Original JSON path not recorded/); assert.match(html, /Referenced collection unavailable/);
+  const plain = { ...report }; delete plain.collection;
+  const unreferenced = await loadReportContext(path.join(dir, 'reviewed.json'), plain);
+  assert.equal(unreferenced.collectionStatus, 'not-referenced');
+  assert.match(renderAuditReportHtml(plain, unreferenced), /Original JSON path not recorded/);
+});
+
+test('suspected duplicates are linked on the cards when the loader read their states; counts are unchanged', async t => {
+  const dir = await evidenceDir(t, {
+    'ev-0001.json': JSON.stringify({ evidenceId: 'ev-0001', after: { documentId: 'doc-1', stateId: 's1' }, result: { nodes: [] } }),
+    'ev-0002.json': JSON.stringify({ evidenceId: 'ev-0002', after: { documentId: 'doc-1', stateId: 's1' }, result: { nodes: [] } }),
+    'ev-0003.json': JSON.stringify({ evidenceId: 'ev-0003', after: { documentId: 'doc-1', stateId: 's2' }, result: { nodes: [] } }),
+  });
+  const at = (id, evidenceId, nodeId) => ({ ...finding(id, '4.1.2'), target: { evidenceId, nodeId }, evidenceIds: [evidenceId] });
+  const findings = [at('a', 'ev-0001', 'doc-1:x'), at('b', 'ev-0002', 'doc-1:x'), at('c', 'ev-0003', 'doc-1:x'), at('d', 'ev-0001', 'doc-1:y')];
+  const report = reviewed(findings, { queue: ['a', 'b', 'c', 'd'], decisions: findings.map(row => decision(row.id, 'insufficient')) });
+  const context = await loadReportContext(path.join(dir, 'reviewed.json'), report);
+  const html = renderAuditReportHtml(report, context);
+  const card = id => html.slice(html.indexOf(`id="f-${id}"`), html.indexOf('</article>', html.indexOf(`id="f-${id}"`)));
+  assert.match(card('a'), /<dt>Suspected duplicate<\/dt><dd>Advisory only: same criterion, target and recorded state as <code>b<\/code>\./);
+  assert.match(card('b'), /as <code>a<\/code>\./);
+  for (const id of ['c', 'd']) assert.doesNotMatch(card(id), /Suspected duplicate/, id);
+  assert.match(html, /<b>4<\/b><span>findings/); assert.match(html, /Needs review<\/dt><dd>4<\/dd>/);
+  assert.doesNotMatch(renderAuditReportHtml(report), /Suspected duplicate/, 'no recorded state, no duplicate claim');
+  const pages = renderBoundedAuditReportHtml(report, context);
+  assert.equal((pages[1].html.match(/<dt>Suspected duplicate<\/dt>/g) ?? []).length, 2);
+});

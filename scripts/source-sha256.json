@@ -48,8 +48,8 @@
     },
     {
       "path": "docs/publication-boundary.md",
-      "bytes": 5368,
-      "sha256": "40747a4d2901cadc7706f40a062ca2e401fcaffa40204209bc6beaf06af3dd43"
+      "bytes": 5513,
+      "sha256": "4e9bd899bd682b6cf0717f18ad39eb4272de340d53a20c40144f7f8ce0f52b82"
     },
     {
       "path": "docs/state-machines.md",
@@ -618,8 +618,8 @@
     },
     {
       "path": "test/release-version.test.js",
-      "bytes": 3312,
-      "sha256": "cb450fcaad75b9a74981eddf63a87bb5dbcbfbfaeb8a411e3f0238929e070f91"
+      "bytes": 6344,
+      "sha256": "7ec4ae7e50baac24cdc7a136e1b9292f2026c543e71fdf50270fb1a63102e9fd"
     },
     {
       "path": "test/source-monitor-latency.test.js",

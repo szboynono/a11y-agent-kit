@@ -43,7 +43,9 @@ async function markdownFiles(directory) {
 }
 
 test('release version: every pinned a11y-agent-kit@X.Y.Z in user docs and skills is the package version', async () => {
-  const files = ['README.md', 'llms.txt', ...await markdownFiles('examples'), ...await markdownFiles('skills'), ...await markdownFiles('commands')];
+  const files = ['README.md', 'llms.txt', ...await markdownFiles('examples'), ...await markdownFiles('skills'), ...await markdownFiles('commands'), ...await markdownFiles('docs')];
+  // docs/mcp-images.md ships in the npm package, so its commands are scanned even when it pins no version.
+  assert.ok(files.includes('docs/mcp-images.md'), 'the packaged docs page is scanned');
   let pins = 0;
   for (const file of files) {
     const text = await fs.readFile(path.join(root, file), 'utf8');

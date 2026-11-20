@@ -156,7 +156,7 @@ The kit writes reports, records, and PNGs to local disk and has no model service
 
 From a source checkout, run `node scripts/verify-source.mjs` to check the files listed in the source manifest. For development, run `npm ci` and install the matching Chromium with the command above. The source-only `node scripts/quickstart.mjs` exercises the CLI and stdio MCP on a synthetic loopback fixture. See [source verification and recorded release checks](https://github.com/szboynono/a11y-agent-kit/blob/main/docs/publication-boundary.md) and [earlier archive test scope at v0.1.1](https://github.com/szboynono/a11y-agent-kit/blob/v0.1.1/docs/publication-boundary.md).
 
-The source tree also includes a [local plugin command](https://github.com/szboynono/a11y-agent-kit/blob/v0.1.1/commands/a11y-audit.md). See the [lifecycle and state machines](https://github.com/szboynono/a11y-agent-kit/blob/v0.1.1/docs/state-machines.md) and the [agent documentation index](llms.txt).
+The source tree also includes a [local plugin command](https://github.com/szboynono/a11y-agent-kit/blob/v0.1.2/commands/a11y-audit.md). See the [lifecycle and state machines](https://github.com/szboynono/a11y-agent-kit/blob/v0.1.2/docs/state-machines.md) and the [agent documentation index](llms.txt).
 
 ## License
 

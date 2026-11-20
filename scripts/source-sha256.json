@@ -19,12 +19,12 @@
     {
       "path": "README.md",
       "bytes": 14745,
-      "sha256": "3566380cb06b10d5fb85cd72523413d740966bc23ed7c76f107dc6b8b1dd69fa"
+      "sha256": "3a498212fa752a7a51bad5b114b8da655094016eac78c0dd7a7c402d3c36958f"
     },
     {
       "path": "THIRD_PARTY_NOTICES.md",
       "bytes": 6581,
-      "sha256": "ccde014c92f33aabdc8044d16c775049efe67d93f226884284a6a69e10977cc3"
+      "sha256": "4f121e008fe19eed34f069f547d860f813c9ba4e4b177219eec8b271caf0ddcc"
     },
     {
       "path": "commands/a11y-audit.md",
@@ -48,8 +48,8 @@
     },
     {
       "path": "docs/publication-boundary.md",
-      "bytes": 4587,
-      "sha256": "bedf288e690f52ff6fb9371ad2feb0ba858bacd4813d21e130bd234d22958048"
+      "bytes": 5368,
+      "sha256": "40747a4d2901cadc7706f40a062ca2e401fcaffa40204209bc6beaf06af3dd43"
     },
     {
       "path": "docs/state-machines.md",
@@ -113,8 +113,8 @@
     },
     {
       "path": "examples/codex-mcp.md",
-      "bytes": 881,
-      "sha256": "3bdc414d3f69110f194482704bbc9f4c2038ca0f3cbb3dbff5fc8dc07ffe2f13"
+      "bytes": 989,
+      "sha256": "fe5e43f1bb4bcc3af1faf99dc663fce4a72fe2cc46657e9a41194a95f3270d31"
     },
     {
       "path": "examples/first-use.md",
@@ -333,8 +333,8 @@
     },
     {
       "path": "src/cli.js",
-      "bytes": 9389,
-      "sha256": "89d9325d0e42432c950c86a7a27dbdc1ef9ea5bcd0bd41cd6eff872112768ba4"
+      "bytes": 9963,
+      "sha256": "8961873e90b34d1f42618fdf821261bae3a0c12087b33c46578117a29219d863"
     },
     {
       "path": "src/evidence.js",
@@ -618,8 +618,8 @@
     },
     {
       "path": "test/release-version.test.js",
-      "bytes": 3084,
-      "sha256": "7ee67f28424e37d35e432e73dc5ad116f417f00f0ba40f28c58c347aa8e6483b"
+      "bytes": 3312,
+      "sha256": "cb450fcaad75b9a74981eddf63a87bb5dbcbfbfaeb8a411e3f0238929e070f91"
     },
     {
       "path": "test/source-monitor-latency.test.js",

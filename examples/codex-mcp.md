@@ -1,7 +1,9 @@
 # Local MCP transport and host boundary
 
-The current stdio server registers the three evidence-audit lifecycle tools
-alongside the historical analyze/verify/check tools. Use the
+The current stdio server registers six tools: the three evidence-audit
+lifecycle tools (`a11y_audit_start`, `a11y_audit_request`, `a11y_audit_close`)
+and the three historical tools (`a11y_analyze`, `a11y_verify`,
+`a11y_check_evidence`). Use the
 [generic MCP configuration and workflow](byoa-audit.md#mcp-connection), with
 `npx -y a11y-agent-kit@0.1.2 serve` as the local child process.
 

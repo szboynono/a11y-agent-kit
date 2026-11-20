@@ -12,7 +12,7 @@ node scripts/verify-source.mjs
 
 The read-only verifier checks the byte counts and SHA-256 of files listed in [scripts/source-sha256.json](../scripts/source-sha256.json). Unlisted files are outside its scope. Git and installed dependencies are unnecessary for this check.
 
-The [v0.1.1 tag](https://github.com/szboynono/a11y-agent-kit/tree/v0.1.1) pins the released source. Its manifest SHA-256 is `46af074c67c0f6ec9d5fa0b6568dd6e8db0aa5914e1456993c9227db4f084266`. If you received a source archive, compare its SHA-256 and the verifier's `manifestSha256` with digests you obtained separately. Compute the archive digest with `shasum -a 256 a11y-agent-kit-source.tar.gz`.
+The [v0.1.2 tag](https://github.com/szboynono/a11y-agent-kit/tree/v0.1.2) pins the released source. Its manifest SHA-256 is `edd75b0afbf90766ca0e0912278313a3ed74d45a293270423fa33892127406ec`. The manifest SHA-256 of the earlier [v0.1.1 tag](https://github.com/szboynono/a11y-agent-kit/tree/v0.1.1) is `46af074c67c0f6ec9d5fa0b6568dd6e8db0aa5914e1456993c9227db4f084266`. If you received a source archive, compare its SHA-256 and the verifier's `manifestSha256` with digests you obtained separately. Compute the archive digest with `shasum -a 256 a11y-agent-kit-source.tar.gz`.
 
 ## Exercise the toolkit locally
 
@@ -20,6 +20,8 @@ The [v0.1.1 tag](https://github.com/szboynono/a11y-agent-kit/tree/v0.1.1) pins t
 - Run `npm test` for the included test suite. See [test coverage and omissions](test-coverage.md) for the exact coverage gaps.
 
 ## Recorded verification
+
+Version 0.1.2 was released on 2026-11-20 (UTC). The npm package `a11y-agent-kit@0.1.2` has integrity `sha512-7+ZcWhVzoogAPgWCyBc21PERg8bsshkRdpSLU3duSddekwXaDxrn2gKSblbMnkOD+Uy0324JS6d4ygGEoeB+JA==` and SHA-1 shasum `3518f37cbeb9ba41fe914ab9991245d3ef675f17`, and contains 66 files. The release source is commit `fe38252a21cde826429eaf88b311ed84b5bb9ac3` on GitHub `main`. The annotated tag `v0.1.2` (tag object `97cfce1c75b45dd2d32029449390a13c5631b184`) points to that commit. This record identifies the released package and source. It is not validation on real third-party sites, which remains open.
 
 The v0.1.1 verification record for source commit `20630208337fa1a0a4dd11a6edecfbfe73f612aa` covers all 116 listed files and a locked dependency install. The published npm tarball has SHA-256 `126858f997fe86598bd735ee62ed8d8e7cc6a39f1d25f8417d42da9d1d33c04c` and its 60 files match that commit. With the installed package and matching Chromium, the source quickstart passed all 13 checks on a synthetic loopback fixture in the recorded SDK and browser configuration.
 

@@ -116,7 +116,7 @@ try {
     if (!['analyze', 'verify', 'check'].includes(command) ||
         ![1, 2].includes(args.length) || !args[0].trim() || args[0].startsWith('-') ||
         (args.length === 2 && args[1] !== '--summary')) {
-      throw new ToolError('USAGE', 'Usage: a11y-agent-kit init [URL] [--force] [--write] [--install] | analyze manifest.json [--summary] | verify baseline.json [--summary] | check report.json [--summary] | serve');
+      throw new ToolError('USAGE', 'Usage: a11y-agent-kit init [URL] [--manifest PATH] [--force] [--write] [--install] | audit manifest.json [--summary] | audit-agent manifest.json | audit-live manifest.json [--summary] | audit-checkpoint-read checkpoint.json | audit-submit-checkpoint audit.json checkpoint.json | audit-submit audit.json findings.json [--summary] | audit-review proposal.json adjudication.json [--out NEW_REVIEW.json] [--summary] | audit-check report.json [--summary] | audit-report REPORT.json [--out report.html] [--screenshots] [--bounded --out NEW_DIRECTORY] | audit-inventory REPORT_PATH [DISPOSITIONS_PATH] [--limit 1..200] [--cursor TOKEN] [--write] | analyze manifest.json [--summary] | verify baseline.json [--summary] | check report.json [--summary] | serve');
     }
     let result;
     if (command === 'analyze') result = await analyze(JSON.parse(await fs.readFile(args[0], 'utf8')));

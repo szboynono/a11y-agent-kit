@@ -1,6 +1,6 @@
 # Source verification and test scope
 
-a11y-agent-kit 0.1.1 is available from npm. Use Node.js 22.12+ and install matching Playwright Chromium as shown in the [npm quickstart](../README.md#run-your-first-audit-from-npm). The source tree also includes the local plugin, test suite, and verification scripts.
+a11y-agent-kit 0.1.2 is available from npm. Use Node.js 22.12+ and install matching Playwright Chromium as shown in the [npm quickstart](../README.md#run-your-first-audit-from-npm). The source tree also includes the local plugin, test suite, and verification scripts.
 
 ## Verify the source files
 

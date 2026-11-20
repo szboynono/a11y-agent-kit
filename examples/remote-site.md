@@ -38,14 +38,14 @@ If the server refuses `HEAD` requests, drop `-I`. Use the printed URL as `url`. 
 Save it as `evidence/audit-manifest.json` (see [audit-manifest-remote.json](audit-manifest-remote.json)). Run a bounded sample, or start an agent session as in the [README](../README.md#audit-a-site-you-are-authorized-to-test):
 
 ```sh
-npx -y a11y-agent-kit@0.1.1 audit evidence/audit-manifest.json --summary
+npx -y a11y-agent-kit@0.1.2 audit evidence/audit-manifest.json --summary
 ```
 
 ## 4. Same origin, declared origins and blocked navigation
 
 Main-document navigation, including every redirect hop, stays on the manifest origin. Subresources such as CDNs, fonts and analytics load normally; only the main document is guarded. The kit does not crawl a site. It audits the pages and states your agent visits within the session budget.
 
-The source tree (not npm 0.1.1) adds two optional manifest fields. npm 0.1.1 rejects unknown manifest fields, so with 0.1.1 use the resolved URL from step 2 instead.
+Version 0.1.2 adds two optional manifest fields. npm 0.1.1 rejects unknown manifest fields, so with 0.1.1 use the resolved URL from step 2 instead.
 
 - `allowedOrigins`: extra exact origins, such as `["https://www.example.com"]`, that the main document may navigate to. List only origins you are authorized to audit. Write each entry as `scheme://host[:port]` with no path (not even a trailing slash), query, fragment or credentials. Letter case, a default port (`:443`, `:80`) and a Unicode hostname are normalized to the canonical origin; the report and `suggestedAction` always use the canonical form.
 - `followRedirects`: `true` follows a main-document redirect to the manifest origin or an `allowedOrigins` entry, and a same-host `http` to `https` upgrade, for at most 5 hops. Omitted or `false` keeps the original rule: redirects must stay on the same origin.
@@ -77,7 +77,7 @@ The check is detection only. Chromium resolves the name again when it connects, 
 
 **`dnsCheck`.** The navigation report (`navigation.dnsCheck`) records the DNS check for the session. It has `status`: `checked`, `degraded`, `not_used` (no DNS name was looked up) or `not_applicable` (network replay). It also has `session` (`type`: `public` or `private`; `basis`: `literal`, `resolution`, or `literal_fallback` when the start lookup degraded; and the start `resolution`, with its `error` when it failed), `lookups`, `failedLookups`, `skippedLookups` (only when nonzero: requests allowed without a lookup because their host had already failed or their navigation had used its DNS wait), and, when degraded, up to 8 `failures` (`stage`, `host`, `error` such as `ENOTFOUND`, `LOOKUP_TIMEOUT`, `NO_ADDRESSES` or `LOOKUP_BUDGET_EXHAUSTED`). A host is listed once for each failed lookup, so it appears again only when it is looked up again (after a shortened timeout, or after it was dropped from the 64 remembered hosts); a host skipped because its navigation used its DNS wait is listed each time with `LOOKUP_BUDGET_EXHAUSTED`. The record also has a `note`, and `failuresOmitted` counts entries beyond 8. The JSONL `session` line, the `audit-agent-session` line and the MCP `a11y_audit_start` response carry the full `dnsCheck` (the MCP start falls back to the brief form below if its startup sweep grew the record past the room left for it). While it is degraded, the full record is repeated on each JSONL record line of `audit session`, and each later agent or MCP response repeats a brief form of at most 600 bytes: `status`, `session` (`type` and `basis`), `lookups`, `failedLookups`, `skippedLookups`, `failureEntries`, `detail: "brief"` and a fixed `note`, with no host names, so that it never crowds out evidence pages; read pages are sized to leave room for it. The sealed report keeps the full record, and the HTML report lists it under "Untested scope and limits".
 
-In the source tree, a blocked navigation keeps the error code and `details` that npm 0.1.1 returns, and adds a structured `navigation` field next to them. This is additive: no code is renamed and no existing field moves. `navigation` is present in CLI JSON (`errors[]`), JSONL and MCP. In the JSONL and MCP `read` summary of an action record, `error` keeps only its 0.1.1 keys, inlined or deferred by the same 1 KiB rule as in 0.1.1, and the payload is a separate `errorNavigation` field in the same response (a deferred handle only above 4 KiB); a `read` of the field `/error` returns the error together with `navigation`. The handle's `serializedBytes` counts `navigation` alone; the `/error` read it points to also returns the 0.1.1 keys, so it is larger. `navigation` has:
+Since 0.1.2, a blocked navigation keeps the error code and `details` that npm 0.1.1 returns, and adds a structured `navigation` field next to them. This is additive: no code is renamed and no existing field moves. `navigation` is present in CLI JSON (`errors[]`), JSONL and MCP. In the JSONL and MCP `read` summary of an action record, `error` keeps only its 0.1.1 keys, inlined or deferred by the same 1 KiB rule as in 0.1.1, and the payload is a separate `errorNavigation` field in the same response (a deferred handle only above 4 KiB); a `read` of the field `/error` returns the error together with `navigation`. The handle's `serializedBytes` counts `navigation` alone; the `/error` read it points to also returns the 0.1.1 keys, so it is larger. `navigation` has:
 
 - `code`: always `AUDIT_NAVIGATION_BLOCKED`;
 - `stage`, `fromUrl`, `blockedUrl` and `redirectChain`, with each hop's URL and HTTP status;
@@ -87,7 +87,7 @@ In the source tree, a blocked navigation keeps the error code and `details` that
 - `suggestedAction` (and sometimes `alternativeAction`), with `kind` set to `use_url` (with `url`), `declare_origin` (with a `manifestPatch` to merge into the manifest) or `stop`;
 - `reportPath` when a live or agent session failed to start.
 
-| Where the block happens | Code and `details` (as npm 0.1.1 returns them, where 0.1.1 can reach the case) | Added in the source tree |
+| Where the block happens | Code and `details` (as npm 0.1.1 returns them, where 0.1.1 can reach the case) | Added in 0.1.2 |
 |---|---|---|
 | CLI `audit`, start URL | `errors[]` entry `RUNTIME_ERROR` with `stage: "audit-browser-start"` and no `details`, plus `AUDIT_UNSUPPORTED_EVENT` with `details: {reason: "navigation_outside_origin", url}` | `navigation` on both entries |
 | `audit-agent`, `audit-live` or MCP `a11y_audit_start`, start URL | `AUDIT_SESSION_START_FAILED` with `details: {reportPath}` (MCP returns only `code` and `message`, as in 0.1.1) | `navigation`, including `reportPath` |
@@ -114,4 +114,4 @@ The HTML header's **Page** row shows the URL the browser landed on. When it diff
 
 The **URL binding** row and `applicationBinding: "caller-declared"` say that the caller declares the URL serves `projectRoot`. For a remote site, `projectRoot` is your workspace, not the site's source. The source fingerprint and `audit-check: current` say that the workspace and evidence are unchanged, not that the live site is unchanged.
 
-Results describe the states that were observed. They are not a conformance verdict for the page or site. An audit of a third-party site is not evidence that this kit has been validated on real sites; that validation remains open (see the [publication boundary](../docs/publication-boundary.md)).
+Results describe the states that were observed. They are not a conformance verdict for the page or site. An audit of a third-party site is not evidence that this kit has been validated on real sites; that validation remains open (see the [publication boundary](https://github.com/szboynono/a11y-agent-kit/blob/main/docs/publication-boundary.md)).

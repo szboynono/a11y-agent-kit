@@ -21,7 +21,7 @@ async function toolResult(action) {
 }
 
 export function createServer() {
-  const server = new McpServer({ name: 'a11y-agent-kit', version: '0.1.1' }, { instructions: AUDIT_SERVER_INSTRUCTIONS });
+  const server = new McpServer({ name: 'a11y-agent-kit', version: '0.1.2' }, { instructions: AUDIT_SERVER_INSTRUCTIONS });
   server.registerTool('a11y_analyze', {
     description: 'Replay declared states and CSS assertions, scan three supported axe rules, and save a frozen baseline under projectRoot/evidence. URL/source binding is caller-declared.',
     inputSchema: manifestSchema,

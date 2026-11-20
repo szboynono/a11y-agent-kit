@@ -4,7 +4,7 @@
     {
       "path": ".claude-plugin/plugin.json",
       "bytes": 524,
-      "sha256": "c10266468d7e8f4429bd6a103fe33a953cf41d31fbfd80fc3fee43dcdf3e1a6a"
+      "sha256": "a564b0a68b27c826c97b80937586d1885121584ff1e3ebba7a993ea0db698af0"
     },
     {
       "path": ".gitignore",
@@ -18,8 +18,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 13594,
-      "sha256": "bf4ef239bfc7b94b457ae5d0a9ef79add52966229e39ff2c758d8add9ada2e4c"
+      "bytes": 14745,
+      "sha256": "3566380cb06b10d5fb85cd72523413d740966bc23ed7c76f107dc6b8b1dd69fa"
     },
     {
       "path": "THIRD_PARTY_NOTICES.md",
@@ -49,7 +49,7 @@
     {
       "path": "docs/publication-boundary.md",
       "bytes": 4587,
-      "sha256": "6176279f15d8c4bfaafd471ae1c349f19dd10f134fce774b400fc6d5bce316cf"
+      "sha256": "bedf288e690f52ff6fb9371ad2feb0ba858bacd4813d21e130bd234d22958048"
     },
     {
       "path": "docs/state-machines.md",
@@ -59,12 +59,12 @@
     {
       "path": "docs/test-coverage.md",
       "bytes": 3532,
-      "sha256": "fe03100c328acdc65a1471d36ba6161468b372fd1d99d9ab35e7b46fc250ef28"
+      "sha256": "6c43f5846e0e31e109697a621fb669a8f1fa58b97ddc5ca6ed564fef35f2d2f3"
     },
     {
       "path": "examples/agent-workflow.md",
       "bytes": 3946,
-      "sha256": "5277ed1728cdfd46bd059ab736e48eaf4f15dbacec53e9b04750650fbdb18bf3"
+      "sha256": "2eb05b12f04bd1310cc9d65135959c97c17431742f7ab4863429c179d2d370b6"
     },
     {
       "path": "examples/audit-agent-manifest.json",
@@ -79,7 +79,7 @@
     {
       "path": "examples/audit-agent-workflow.md",
       "bytes": 3535,
-      "sha256": "9bd5291644b4542711e604b0462dc8d12f0d6bfa4323b277775cb26c827ddb97"
+      "sha256": "1ce7c040f92c866c44780cf574ad0370153f0c0c404d21d39623af6746ac4109"
     },
     {
       "path": "examples/audit-live.jsonl",
@@ -98,13 +98,13 @@
     },
     {
       "path": "examples/audit-workflow.md",
-      "bytes": 3789,
-      "sha256": "59db743d81dfa0e8b449e96cd86010597bdcbd3c3706898e3a1f3209b50de292"
+      "bytes": 3653,
+      "sha256": "ac621e5fd3ad0943caa82b644bca3bce47e28b1eaab30edb3313ddaceafd7ec6"
     },
     {
       "path": "examples/byoa-audit.md",
-      "bytes": 19393,
-      "sha256": "ca17b1543875f81367b61c1b80566d71d38b900e05cd53dc38002cd142f73d1b"
+      "bytes": 19290,
+      "sha256": "c8c5434cdcfac9394fe62320dcc3893d3afa5b99d6bb06ebfbe915f3e66e6b05"
     },
     {
       "path": "examples/codex-cli.md",
@@ -114,12 +114,12 @@
     {
       "path": "examples/codex-mcp.md",
       "bytes": 881,
-      "sha256": "39a8df06abc47ec0dab00eea50d569470b330477190cd4abd0ff36c271354610"
+      "sha256": "3bdc414d3f69110f194482704bbc9f4c2038ca0f3cbb3dbff5fc8dc07ffe2f13"
     },
     {
       "path": "examples/first-use.md",
-      "bytes": 5145,
-      "sha256": "5cf4d732e0fd4ed1e47e4504aa2bb3839d60e28b751678e744c49b4f3459c316"
+      "bytes": 4966,
+      "sha256": "d5334ae3e6ca69454db6e592fe203305d24a4e7aad621d7142223f46fe09d2bd"
     },
     {
       "path": "examples/manifest.json",
@@ -128,23 +128,23 @@
     },
     {
       "path": "examples/remote-site.md",
-      "bytes": 18547,
-      "sha256": "3074bf2bd380caefe50664cfa6c6c53695fb781d6c067ce3d86274c7549f9dd7"
+      "bytes": 18563,
+      "sha256": "5fd0c5bb74b39540eb353da54c58cc6aaa0c7d4a716a403cddb650fda3dd2187"
     },
     {
       "path": "llms.txt",
-      "bytes": 3599,
-      "sha256": "9038290d51e34d604ee164f2ba6b7c953c19081e8498cdaa8f43d795c24755d0"
+      "bytes": 3824,
+      "sha256": "64ab7a5573a5031192df4ba81c75853549630ec094bb56f170b02669cf197f34"
     },
     {
       "path": "package-lock.json",
       "bytes": 8324,
-      "sha256": "4dda00f58ff10fb1e02e459f682f4dc67545a01b4e19b03e0b57bf873111165e"
+      "sha256": "381b5228164d4b816dc75df67bb3a5936edf262d5884cd7ca117fe182b67bc8e"
     },
     {
       "path": "package.json",
-      "bytes": 1369,
-      "sha256": "38e02a7f40f82321978bd8d752f2f9785db8dc966c08e313bd6b23fd97aa46fd"
+      "bytes": 1406,
+      "sha256": "190daa902a8ce8322447f94890518759420ef5af7c29bd29bbd907013f6f1d27"
     },
     {
       "path": "scripts/quickstart.mjs",
@@ -158,8 +158,8 @@
     },
     {
       "path": "skills/a11y-audit/SKILL.md",
-      "bytes": 57998,
-      "sha256": "4d474b005c2e4f2b330aa7230dc1c3cfea5b0548d4e4f36232292c432a28fd48"
+      "bytes": 57980,
+      "sha256": "37ee13ab56f03c38441838e506aa666c17bff565b01e2e3fec0fc9fa3546ce52"
     },
     {
       "path": "skills/a11y-audit/references/evidence-policy-v2.md",
@@ -169,7 +169,7 @@
     {
       "path": "skills/a11y-fix-loop/SKILL.md",
       "bytes": 4835,
-      "sha256": "bc28737590e71baba1a349b3874c3fcc2ba11e4007074fab5df0bdf6169aee19"
+      "sha256": "bdceaa9a1eddb0eb51e140e801fe9bbf89b8262975c06d71c8537a29756e5b38"
     },
     {
       "path": "src/audit/agent-cli.js",
@@ -359,7 +359,7 @@
     {
       "path": "src/server.js",
       "bytes": 2760,
-      "sha256": "4a18cfef9d7aa18c2fe150a5520108d25033a535253e8303383a9a2529b85ec5"
+      "sha256": "c188385e5382889eb91f9b265b1237f3a6040e45fd409e5495ab918e3df1b799"
     },
     {
       "path": "src/summary.js",
@@ -603,8 +603,8 @@
     },
     {
       "path": "test/init.test.js",
-      "bytes": 12526,
-      "sha256": "225eb5d93e4e9c5d3804808f1755bcfe743aa394a76931def00cddeff1fab865"
+      "bytes": 12707,
+      "sha256": "17cd0a407ab2ef534481cc151985b31f3ea97849064bb77e6fadc24177cd4994"
     },
     {
       "path": "test/interface.test.js",
@@ -615,6 +615,11 @@
       "path": "test/mcp-transport.js",
       "bytes": 708,
       "sha256": "123d086840f3da263c85601b76474e67209e6a534e9216a72dcbc3dc8328bd9d"
+    },
+    {
+      "path": "test/release-version.test.js",
+      "bytes": 3084,
+      "sha256": "7ee67f28424e37d35e432e73dc5ad116f417f00f0ba40f28c58c347aa8e6483b"
     },
     {
       "path": "test/source-monitor-latency.test.js",

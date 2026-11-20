@@ -1,6 +1,6 @@
 # Test coverage and omissions
 
-From the source tree, `npm test` selects the 47 included test files. The 529-test results apply to the two exact source archives listed in [recorded verification](publication-boundary.md#recorded-verification). The v0.1.1 record covers source integrity, installation, and the synthetic quickstart. Omitted files and cases are coverage gaps.
+From the source tree, `npm test` selects the 49 included test files. The 529-test results apply to the two exact source archives listed in [recorded verification](publication-boundary.md#recorded-verification). The v0.1.1 record covers source integrity, installation, and the synthetic quickstart. Omitted files and cases are coverage gaps.
 
 Multibyte stress tests use non-CJK samples.
 

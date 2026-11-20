@@ -3,10 +3,10 @@
 Find accessibility problems in your running web app with the coding agent you already use, and get an HTML report backed by saved screenshots and browser records.
 
 ```sh
-npx -y a11y-agent-kit@0.1.2 init
+npx -y a11y-agent-kit@0.1.2 init --install --write
 ```
 
-Then paste this into your agent:
+Run it from your app's project root with Node.js 22.12+ and npm. It writes the audit manifest, downloads the matching Chromium from the Playwright CDN if it is missing, and creates the MCP settings for Claude Code, Cursor and Codex where they do not exist yet. If `init` reports that something is still missing, follow the steps it prints. Then restart your agent and paste this into it:
 
 ```text
 Check my running app at http://127.0.0.1:3000/ for accessibility problems with a11y-agent-kit, using evidence/audit-manifest.json.
@@ -18,24 +18,28 @@ When you finish, give me the HTML report, where the evidence is saved, and what 
 
 The sample report above comes from a small test page in this repository, served on loopback. Findings stay "needs review" until a separate reviewer checks them.
 
-`init` ships in a11y-agent-kit 0.1.2. Until that version is on npm, use the [manual setup with npm 0.1.1](#manual-setup-with-npm-011).
-
 ## What `init` does
 
-Run it from your app's project root with Node.js 22.12+ and npm.
+`init` never overwrites an existing file unless you ask it to.
 
-- Writes `evidence/audit-manifest.json` with `projectRoot` set to the current directory's real path and `url` set to `http://127.0.0.1:3000/`. Pass another address as the first argument, for example `init http://localhost:5173/`. An existing manifest is left unchanged unless you add `--force`.
-- Checks that the Chromium build matching the kit's Playwright version starts. If it is missing, `init` prints the install command (`npx -y playwright@1.64.1 install chromium`). Add `--install` to download it from the Playwright CDN; nothing is downloaded without it.
-- Prints the MCP server settings for Claude Code (`.mcp.json`), Cursor (`.cursor/mcp.json`) and Codex (`.codex/config.toml`), each running `npx -y a11y-agent-kit@0.1.2 serve`. Add `--write` to create the files that do not exist yet. An existing configuration file is never changed; `init` prints the entry for you to add instead.
+- Writes `evidence/audit-manifest.json` with `projectRoot` set to the current directory's real path and `url` set to `http://127.0.0.1:3000/`. Pass another address as the first argument, for example `init http://localhost:5173/ --install --write`. An existing manifest is left unchanged unless you add `--force`.
+- Checks that the Chromium build matching the kit's Playwright version starts. With `--install`, a missing build is downloaded from the Playwright CDN. Without it, nothing is downloaded: `init` prints the install command (`npx -y playwright@1.64.1 install chromium`) and exits with status 1.
+- With `--write`, creates the MCP server settings for Claude Code (`.mcp.json`), Cursor (`.cursor/mcp.json`) and Codex (`.codex/config.toml`), each running `npx -y a11y-agent-kit@0.1.2 serve`. An existing configuration file is never changed; `init` prints the entry for you to add instead. Without `--write`, all three are printed only.
 - Prints the prompt above for your agent.
 
 To run one audit without an agent, use `npx -y a11y-agent-kit@0.1.2 audit evidence/audit-manifest.json --summary`.
 
+## Upgrade from 0.1.1
+
+Change the pinned version from `0.1.1` to `0.1.2` in your `npx -y a11y-agent-kit@...` commands and MCP settings. `init` does not edit an existing `.mcp.json`, `.cursor/mcp.json` or `.codex/config.toml`, so change the version in those files yourself, or rerun `claude mcp add` in Claude Code. For a global installation, run `npm install -g a11y-agent-kit@0.1.2`. Playwright stays at 1.64.1, so a Chromium installed for 0.1.1 keeps working.
+
+Version 0.1.2 adds `init`, the optional `allowedOrigins` and `followRedirects` manifest fields, an additive `navigation` field on blocked navigation, a DNS check for top-level document requests, untrusted-content markers in `a11y_audit_*` MCP responses, and a redesigned HTML report. A blocked navigation keeps the error code it had in 0.1.1. See the [remote-site guide](examples/remote-site.md) and [trusted inputs and known gaps](#trusted-inputs-and-known-gaps).
+
 <a name="run-your-first-audit-from-npm"></a>
 
-## Manual setup with npm 0.1.1
+## Manual setup without `init`
 
-Use this setup until `init` is on npm. Use Node.js 22.12+ and npm. Start your app. Run the block below in a POSIX shell from your app's project root. It installs matching Playwright Chromium, writes a manifest whose `projectRoot` is the output of `pwd -P`, and runs the npm package to collect evidence. If your app runs at another address, change `url` before the last command.
+Use this setup if you prefer to write the manifest yourself or your agent runs CLI commands instead of MCP. Use Node.js 22.12+ and npm. Start your app. Run the block below in a POSIX shell from your app's project root. It installs matching Playwright Chromium, writes a manifest whose `projectRoot` is the output of `pwd -P`, and runs the npm package to collect evidence. If your app runs at another address, change `url` before the last command.
 
 ```sh
 npx -y playwright@1.64.1 install chromium
@@ -46,14 +50,14 @@ cat > evidence/audit-manifest.json <<JSON
   "url": "http://127.0.0.1:3000/"
 }
 JSON
-npx -y a11y-agent-kit@0.1.1 audit evidence/audit-manifest.json --summary
+npx -y a11y-agent-kit@0.1.2 audit evidence/audit-manifest.json --summary
 ```
 
 Open the `reportPath` from the command's JSON output for the local collection. A successful run saves DOM and axe records, screenshots, and a keyboard sample under `evidence/`. Leave the app running for the next step. See the [first-use guide](examples/first-use.md).
 
 <a name="copy-this-to-your-agent"></a>
 
-### Agent prompt for npm 0.1.1
+### Agent prompt for the CLI
 
 Paste this into the coding agent you already use, with the same project and manifest.
 
@@ -63,18 +67,16 @@ Read the evidence rules at
 https://github.com/szboynono/a11y-agent-kit/blob/main/skills/a11y-audit/SKILL.md
 and use the npx commands in this prompt for setup.
 Start one persistent JSONL process with
-npx -y a11y-agent-kit@0.1.1 audit-agent evidence/audit-manifest.json
+npx -y a11y-agent-kit@0.1.2 audit-agent evidence/audit-manifest.json
 Start with snapshot and axe, then adopt bound axe candidates. Open a relevant
 menu or dialog and inspect that state if the app has one. Read original records
 and view PNGs before making visual claims. Save checkpoints and submit the last
 acknowledged digest for review. Render the returned proposal JSON with
-npx -y a11y-agent-kit@0.1.1 audit-report REPORT.json --out evidence/a11y-report.html
+npx -y a11y-agent-kit@0.1.2 audit-report REPORT.json --out evidence/a11y-report.html
 Give me the HTML, the original evidence paths, and any gaps in coverage. Audit only.
 ```
 
-The skill copy inside the npm 0.1.1 package still describes the earlier source-tree setup. Use the npx commands in this README for setup. Only a new npm version can update that copy.
-
-For request examples, batch collection, and submission, see the [BYOA workflow](examples/byoa-audit.md). If your agent uses a local stdio MCP host, use `npx -y a11y-agent-kit@0.1.1 serve` as the server command. See the [MCP configuration](examples/byoa-audit.md#mcp-connection).
+For request examples, batch collection, and submission, see the [BYOA workflow](examples/byoa-audit.md). If your agent uses a local stdio MCP host, use `npx -y a11y-agent-kit@0.1.2 serve` as the server command. See the [MCP configuration](examples/byoa-audit.md#mcp-connection).
 
 ## Audit a site you are authorized to test
 
@@ -90,7 +92,7 @@ cat > evidence/audit-manifest.json <<JSON
   "url": "https://www.example.com/"
 }
 JSON
-npx -y a11y-agent-kit@0.1.1 audit evidence/audit-manifest.json --summary
+npx -y a11y-agent-kit@0.1.2 audit evidence/audit-manifest.json --summary
 ```
 
 Replace `https://www.example.com/` with the URL that `curl` printed. Keep only `evidence/` in the workspace. For an agent session, paste this prompt:
@@ -105,18 +107,18 @@ and the remote-site guide at
 https://github.com/szboynono/a11y-agent-kit/blob/main/examples/remote-site.md
 and use the npx commands in this prompt for setup.
 Start one persistent JSONL process with
-npx -y a11y-agent-kit@0.1.1 audit-agent evidence/audit-manifest.json
+npx -y a11y-agent-kit@0.1.2 audit-agent evidence/audit-manifest.json
 Start with snapshot and axe, then adopt bound axe candidates. Explore only pages
 on the same origin. Do not submit forms, sign in, or trigger actions with side
 effects. If navigation is blocked, report the blocked URL and stop that path.
 Read original records and view PNGs before making visual claims. Save checkpoints
 and submit the last acknowledged digest for review. Render the returned proposal
 JSON with
-npx -y a11y-agent-kit@0.1.1 audit-report REPORT.json --out evidence/a11y-report.html
+npx -y a11y-agent-kit@0.1.2 audit-report REPORT.json --out evidence/a11y-report.html
 Give me the HTML, the original evidence paths, and any gaps in coverage. Audit only.
 ```
 
-The kit does not crawl a site, bypass bot protection or CAPTCHAs, or sign in. On production sites, avoid actions with side effects. The source tree adds optional `followRedirects` and `allowedOrigins` manifest fields and, on a blocked navigation, an additive `navigation` field (`code: "AUDIT_NAVIGATION_BLOCKED"`) with a suggested next step next to the unchanged npm 0.1.1 error code; npm 0.1.1 does not include them. See the [remote-site guide](examples/remote-site.md).
+The kit does not crawl a site, bypass bot protection or CAPTCHAs, or sign in. On production sites, avoid actions with side effects. If the entry URL redirects to another origin you are authorized to test, declare it with the optional `allowedOrigins` and `followRedirects` manifest fields. A blocked navigation keeps its 0.1.1 error code and adds a `navigation` field (`code: "AUDIT_NAVIGATION_BLOCKED"`) with a suggested next step. npm 0.1.1 does not include these fields. See the [remote-site guide](examples/remote-site.md).
 
 ## Review and share the evidence
 

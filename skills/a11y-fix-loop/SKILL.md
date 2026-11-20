@@ -9,7 +9,7 @@ Use the user's own coding agent and editing tools. The CLI runs Playwright and a
 
 The rubric target is **WCAG 2.1 Level AA**. The current three rules supply only partial evidence for SC 4.1.2; they implement no AA-specific criterion assessment. A tool `passed` result concerns the declared check contract, with WCAG conformance separately unassessed. Keep untested or human-review criteria explicit. A focused element alone does not prove a visible focus indicator under AA 2.4.7, and a mouse-assisted keyboard step does not establish keyboard-only operability. Do not mix WCAG 2.2 or AAA requirements into this target.
 
-Use Node.js 22.12+ and install matching Chromium with `npx -y playwright@1.64.1 install chromium`. For the compatibility alias used below, run `npm install -g a11y-agent-kit@0.1.1`. You can also use `npx -y a11y-agent-kit@0.1.1` with the same subcommands. Run from the target project's working directory using absolute manifest and report paths.
+Use Node.js 22.12+ and install matching Chromium with `npx -y playwright@1.64.1 install chromium`. For the compatibility alias used below, run `npm install -g a11y-agent-kit@0.1.2`. You can also use `npx -y a11y-agent-kit@0.1.2` with the same subcommands. Run from the target project's working directory using absolute manifest and report paths.
 
 Before editing source, declare the application's running HTTP(S) URL, absolute `projectRoot`, viewport, supported rules, states, interaction steps, and functional assertions in a local manifest. Supported rules are `button-name`, `label`, and `aria-valid-attr`; selectors use standard CSS. Assertions support `visible`, `enabled`, `focused`, exact `text`, and `count`. Cover the functionality that the fix must preserve. For example:
 

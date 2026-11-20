@@ -146,7 +146,8 @@ test('README first screen: value, init command, prompt, screenshot, then limits'
   assert.ok(order.every(index => index >= 0), JSON.stringify(order));
   assert.deepEqual([...order].sort((a, b) => a - b), order);
   assert.ok(readme.indexOf('## Limits') > readme.indexOf('## What `init` does'));
-  assert.match(firstScreen, /`init` ships in a11y-agent-kit 0\.1\.2\. Until that version is on npm/);
+  assert.ok(firstScreen.includes(`npx -y a11y-agent-kit@${KIT_RELEASE} init --install --write\n`), 'the first command installs Chromium and writes MCP settings in one run');
+  assert.ok(!/until that version is on npm/i.test(readme), 'no pre-release wording once the version ships');
   for (const term of FORBIDDEN.slice(0, 2)) assert.ok(!firstScreen.includes(term));
   assert.match(readme, /Validation on real third-party sites remains open/);
 });

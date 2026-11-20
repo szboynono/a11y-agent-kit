@@ -20,17 +20,17 @@ From your application's directory, create `evidence/` and save this as `evidence
 ```
 
 ```sh
-npx -y a11y-agent-kit@0.1.1 audit evidence/audit-manifest.json --summary
+npx -y a11y-agent-kit@0.1.2 audit evidence/audit-manifest.json --summary
 ```
 
 Open the JSON file at the returned `reportPath`. The default plan takes a bounded sample with DOM snapshots, axe, screenshots, text spacing, and keyboard input. Use the record and attachment paths to inspect the evidence. Findings require submission and separate review.
 
 ## Let your agent explore more states
 
-Paste the [README prompt](../README.md#copy-this-to-your-agent) into your coding-agent session. The agent can read the [audit skill](../skills/a11y-audit/SKILL.md). The copy inside the npm 0.1.1 package still describes the earlier source-tree setup, so use the npx commands in this guide for setup. Only a new npm version can update that copy. Start a new adaptive session with the same manifest and keep stdin open.
+Paste the [README prompt](../README.md#copy-this-to-your-agent) into your coding-agent session. The agent can read the [audit skill](../skills/a11y-audit/SKILL.md). Start a new adaptive session with the same manifest and keep stdin open.
 
 ```sh
-npx -y a11y-agent-kit@0.1.1 audit-agent evidence/audit-manifest.json
+npx -y a11y-agent-kit@0.1.2 audit-agent evidence/audit-manifest.json
 ```
 
 Read the greeting and send `{"tool":"step","actions":[{"action":"snapshot"},{"action":"axe"}]}` as the first request. MCP `a11y_audit_start` runs that step by default. The [BYOA workflow](byoa-audit.md) covers the JSONL requests, budget, batch fallback, and [stdio MCP configuration](byoa-audit.md#mcp-connection).
@@ -42,9 +42,9 @@ Read the original records and view the original PNGs before making visual claims
 Substitute the paths returned by the toolkit. Use a checkpoint JSON or the proposal JSON for HTML. Use the proposal JSON for integrity checks and inventory. Run the commands separately.
 
 ```sh
-npx -y a11y-agent-kit@0.1.1 audit-report RETURNED_PROPOSAL_OR_CHECKPOINT.json --out evidence/a11y-report.html
-npx -y a11y-agent-kit@0.1.1 audit-check RETURNED_PROPOSAL.json --summary
-npx -y a11y-agent-kit@0.1.1 audit-inventory RETURNED_PROPOSAL.json --limit 100
+npx -y a11y-agent-kit@0.1.2 audit-report RETURNED_PROPOSAL_OR_CHECKPOINT.json --out evidence/a11y-report.html
+npx -y a11y-agent-kit@0.1.2 audit-check RETURNED_PROPOSAL.json --summary
+npx -y a11y-agent-kit@0.1.2 audit-inventory RETURNED_PROPOSAL.json --limit 100
 ```
 
 Open the HTML locally. Use `--screenshots` only if you want to embed original page pixels. Follow the [inventory continuations](../skills/a11y-audit/SKILL.md#account-for-retained-axe-observations) for all unresolved axe observations. For a large report, add `--bounded` and pass a new directory to `--out`. Open its `index.html` and keep the numbered detail pages alongside it. The [BYOA workflow](byoa-audit.md#export-a-large-html-report) describes the output limits.

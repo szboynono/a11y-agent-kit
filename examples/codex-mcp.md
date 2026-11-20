@@ -3,7 +3,7 @@
 The current stdio server registers the three evidence-audit lifecycle tools
 alongside the historical analyze/verify/check tools. Use the
 [generic MCP configuration and workflow](byoa-audit.md#mcp-connection), with
-`npx -y a11y-agent-kit@0.1.1 serve` as the local child process.
+`npx -y a11y-agent-kit@0.1.2 serve` as the local child process.
 
 To exercise the stdio protocol on a local fixture, run the source harness
 from a checkout after `npm ci` and matching Chromium installation.

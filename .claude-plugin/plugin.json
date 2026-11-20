@@ -1,7 +1,7 @@
 {
   "name": "a11y-agent-kit",
   "description": "Accessibility audit tools for your own coding agent: local Chromium and axe evidence, WCAG 2.2 AA tracking, independently reviewed findings, and a one-file HTML report.",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "license": "MIT",
   "keywords": [
     "accessibility",

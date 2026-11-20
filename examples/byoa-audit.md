@@ -11,7 +11,7 @@ Start with the [first-use instructions](first-use.md) for installation and repor
 Install matching Chromium as described in [first use](first-use.md). For a stdio host that accepts `mcpServers`, add this entry to its configuration.
 
 ```json
-{"mcpServers":{"a11y-agent-kit":{"command":"npx","args":["-y","a11y-agent-kit@0.1.1","serve"]}}}
+{"mcpServers":{"a11y-agent-kit":{"command":"npx","args":["-y","a11y-agent-kit@0.1.2","serve"]}}}
 ```
 
 If you installed Chromium with a custom `PLAYWRIGHT_BROWSERS_PATH`, set the same value in the server environment through your host configuration.
@@ -26,7 +26,7 @@ By default `view` returns the verified original local PNG path/hash. MCP hosts c
 
 Main-document navigation stays on the manifest origin, including every HTTP redirect hop. Same-origin redirects are allowed; a redirect to another origin is blocked before contacting it. Ordinary cross-origin subresources remain outside this navigation guard; frozen network replay has its own stricter resource policy.
 
-The source tree (not npm 0.1.1) adds optional `allowedOrigins` (extra exact origins) and `followRedirects` (follow redirects to those origins and same-host `http` to `https` upgrades, at most 5 hops). A blocked navigation keeps its npm 0.1.1 error code and `details`, and adds a `navigation` field (`code: "AUDIT_NAVIGATION_BLOCKED"`) with `fromUrl`, `blockedUrl`, `redirectChain`, `reason` and an advisory `suggestedAction` in CLI JSON, JSONL and MCP. Credentials in URLs and HTTPS-to-HTTP redirects are always blocked. A cloud metadata address is blocked in every session. A public site is blocked from reaching any other address that one shared table classifies as not public (see the remote-site guide for the ranges). This applies whether the address is written as an IP literal or `localhost` name or reached through a DNS name that resolves to it. A start host that resolves to a private address, such as a local development or staging name, is not refused; it makes the session private. Only an answer that proves such an address blocks. A failed or timed-out lookup does not: the session's `dnsCheck` is reported as `degraded`, and a private target may then go undetected. A slow resolver costs at most one 2-second wait per navigation; a failed host is remembered for the session (up to 64 hosts) and not looked up again, unless it timed out only because its navigation had less than 2 seconds left. `198.18.0.0/15` is treated as public on purpose because fake-IP proxies use it. Addresses are checked, not pinned, so DNS rebinding is not stopped. See the [remote-site guide](remote-site.md#4-same-origin-declared-origins-and-blocked-navigation).
+Version 0.1.2 adds optional `allowedOrigins` (extra exact origins) and `followRedirects` (follow redirects to those origins and same-host `http` to `https` upgrades, at most 5 hops); npm 0.1.1 rejects them as unknown manifest fields. A blocked navigation keeps its npm 0.1.1 error code and `details`, and adds a `navigation` field (`code: "AUDIT_NAVIGATION_BLOCKED"`) with `fromUrl`, `blockedUrl`, `redirectChain`, `reason` and an advisory `suggestedAction` in CLI JSON, JSONL and MCP. Credentials in URLs and HTTPS-to-HTTP redirects are always blocked. A cloud metadata address is blocked in every session. A public site is blocked from reaching any other address that one shared table classifies as not public (see the remote-site guide for the ranges). This applies whether the address is written as an IP literal or `localhost` name or reached through a DNS name that resolves to it. A start host that resolves to a private address, such as a local development or staging name, is not refused; it makes the session private. Only an answer that proves such an address blocks. A failed or timed-out lookup does not: the session's `dnsCheck` is reported as `degraded`, and a private target may then go undetected. A slow resolver costs at most one 2-second wait per navigation; a failed host is remembered for the session (up to 64 hosts) and not looked up again, unless it timed out only because its navigation had less than 2 seconds left. `198.18.0.0/15` is treated as public on purpose because fake-IP proxies use it. Addresses are checked, not pinned, so DNS rebinding is not stopped. See the [remote-site guide](remote-site.md#4-same-origin-declared-origins-and-blocked-navigation).
 
 Use Node.js 22.12+ and npm. Run `npx -y playwright@1.64.1 install chromium` and keep your application running. Create its `evidence/` directory and save this as `evidence/audit-manifest.json`. Set `projectRoot` to the application's canonical absolute path and `url` to its running address. Generated manifests, proposals, reviews and host logs belong under that application's `evidence/`, outside its source fingerprint.
 
@@ -43,7 +43,7 @@ For a deployed or third-party site you are authorized to test, set `projectRoot`
 }
 ```
 
-Start with the [prompt for your agent](../README.md#copy-this-to-your-agent). Use the [audit skill](../skills/a11y-audit/SKILL.md). The copy inside the npm 0.1.1 package still describes the earlier source-tree setup, so use the npx commands in these guides for setup.
+Start with the [prompt for your agent](../README.md#copy-this-to-your-agent). Use the [audit skill](../skills/a11y-audit/SKILL.md).
 
 New audit manifests accept optional `standard: {version: "2.1" | "2.2", targetLevel: "A" | "AA"}`. New collections default to **2.2 AA / 55 criteria** (31 A, 24 AA); 2.1 AA has 50, 2.1 A has 30, and 2.2 A has 31. Other versions and AAA are rejected. The same manifest works in CLI, MCP and audit-agent. Reports retain the normalized selection and catalog digest; historical reports without a selection remain original 2.1 AA, without upgrading their target or rewriting their bytes. Legacy v0 analyze/verify/check remains 2.1 AA. Ordinary website requests can reach external resources. Local artifact storage and absence of a product model API do not imply an offline browser or prevent your host from sending content to its configured model.
 
@@ -52,7 +52,7 @@ New audit manifests accept optional `standard: {version: "2.1" | "2.2", targetLe
 Start a child process and keep its stdin open:
 
 ```sh
-npx -y a11y-agent-kit@0.1.1 audit-agent /absolute/application/evidence/audit-manifest.json
+npx -y a11y-agent-kit@0.1.2 audit-agent /absolute/application/evidence/audit-manifest.json
 ```
 
 Read the initial `audit-agent-session` greeting before sending requests. Send one JSON object per line, wait for its response, and inspect `success`/`error`. Do not start a new process for each operation. The manifest has no predeclared `actions` for this mode.
@@ -106,7 +106,7 @@ For a transport smoke only, redirect [audit-agent-smoke.jsonl](audit-agent-smoke
 A host without persistent process support can collect a fixed plan:
 
 ```sh
-npx -y a11y-agent-kit@0.1.1 audit /absolute/application/evidence/audit-manifest.json --summary
+npx -y a11y-agent-kit@0.1.2 audit /absolute/application/evidence/audit-manifest.json --summary
 ```
 
 Without `actions`, this collects a bounded initial DOM/axe/visual/spacing/keyboard sample. Read returned local artifacts and use the skill's proposal schema. Each batch starts a fresh browser; keep all evidence for one claim in one collection. Batch mode has no live checkpoint/read/view operations.
@@ -114,16 +114,16 @@ Without `actions`, this collects a bounded initial DOM/axe/visual/spacing/keyboa
 Use actual returned paths for submission, independent review and integrity/source freshness:
 
 ```sh
-npx -y a11y-agent-kit@0.1.1 audit-submit AUDIT_REPORT.json FINDINGS.json --summary
-npx -y a11y-agent-kit@0.1.1 audit-review PROPOSAL_REPORT.json REVIEW.json --summary
-npx -y a11y-agent-kit@0.1.1 audit-check REVIEWED_REPORT.json --summary
+npx -y a11y-agent-kit@0.1.2 audit-submit AUDIT_REPORT.json FINDINGS.json --summary
+npx -y a11y-agent-kit@0.1.2 audit-review PROPOSAL_REPORT.json REVIEW.json --summary
+npx -y a11y-agent-kit@0.1.2 audit-check REVIEWED_REPORT.json --summary
 ```
 
 To recover a saved draft after closure:
 
 ```sh
-npx -y a11y-agent-kit@0.1.1 audit-checkpoint-read CHECKPOINT.json
-npx -y a11y-agent-kit@0.1.1 audit-submit-checkpoint AUDIT_REPORT.json CHECKPOINT.json
+npx -y a11y-agent-kit@0.1.2 audit-checkpoint-read CHECKPOINT.json
+npx -y a11y-agent-kit@0.1.2 audit-submit-checkpoint AUDIT_REPORT.json CHECKPOINT.json
 ```
 
 Parse JSON even on a nonzero exit. Draft reads, recovered proposals, and submissions awaiting review return exit 1 by design. `audit-agent` exits 0 only after explicit successful submission; inspect the proposal's `needs_review` status anyway. Errors/incomplete/expired states are not an accessible-site result. `audit-check:current` means intact evidence and matching source, not semantic approval. Only independently supported claims satisfying the evidence contracts enter `confirmedFindings`. Whole-page conformance remains `not_assessed`; no real screen-reader evidence is supplied here.
@@ -147,7 +147,7 @@ The page contains no script and follows the system light or dark setting. Printi
 Pass a checkpoint, proposal, or reviewed report. Choose a new output directory.
 
 ```sh
-npx -y a11y-agent-kit@0.1.1 audit-report REPORT.json --bounded --out evidence/a11y-report-pages
+npx -y a11y-agent-kit@0.1.2 audit-report REPORT.json --bounded --out evidence/a11y-report-pages
 ```
 
 Open `index.html`. Keep it and the numbered detail pages together. The JSON receipt lists every generated path, UTF-8 byte size, and card count. Each file is smaller than 500,000 UTF-8 bytes. Each detail page contains at most 50 finding cards in their original order. Counts refer to the saved observations. Review status and limitations apply to the whole report.
